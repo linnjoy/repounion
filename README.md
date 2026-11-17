@@ -46,6 +46,12 @@ npm run tauri build
 
 Windows 安装包在 `src-tauri/target/release/bundle/`。
 
+## 从 Actions 下载安装包
+
+推送到 `main`、打开指向 `main` 的拉取请求，或在 GitHub 的 Actions 页面手动运行「Windows 打包」之后，打开该次运行，在 Artifacts 里下载 `repounion-windows`。压缩包里有 WiX 的 `.msi` 和 NSIS 的安装程序 `.exe`。
+
+推送 `v*` 标签时，同一次工作流会把这两份安装包附到对应的 GitHub Release。这个仓库不会自动创建标签或 Release。
+
 只编译前端：
 
 ```bash
