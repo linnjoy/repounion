@@ -212,7 +212,7 @@ mod tests {
                 path.strip_prefix(root.path())
                     .unwrap()
                     .to_string_lossy()
-                    .into_owned()
+                    .replace('\\', "/")
             })
             .collect::<Vec<_>>();
         assert_eq!(rel, vec!["app".to_string(), "services/api".to_string()]);
