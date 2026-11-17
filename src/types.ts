@@ -83,6 +83,54 @@ export interface RescanResult {
 
 export type FilterId = "all" | "dirty" | "unsynced" | "conflict" | "noUpstream";
 
+export type CompareMode = "worktreeHead" | "worktreeIndex" | "indexHead" | "localUpstream";
+
+export type DiffLayout = "side" | "inline";
+
+export interface FileChange {
+  path: string;
+  oldPath: string | null;
+  area: string;
+  code: string;
+  label: string;
+}
+
+export interface ChangeList {
+  mode: CompareMode;
+  upstream: string | null;
+  ahead: number;
+  behind: number;
+  canCompareUpstream: boolean;
+  files: FileChange[];
+}
+
+export interface HunkSpan {
+  fromA: number;
+  toA: number;
+  fromB: number;
+  toB: number;
+  oldLine: number;
+  newLine: number;
+}
+
+export type DiffKind = "text" | "image" | "binary" | "tooLarge" | "unsupported";
+
+export interface FileDiff {
+  path: string;
+  oldPath: string | null;
+  mode: CompareMode;
+  kind: DiffKind;
+  message: string | null;
+  leftText: string | null;
+  rightText: string | null;
+  leftMissing: boolean;
+  rightMissing: boolean;
+  mediaType: string | null;
+  leftImage: string | null;
+  rightImage: string | null;
+  hunks: HunkSpan[];
+}
+
 export function repoName(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");
   const parts = trimmed.split(/[\\/]/);

@@ -316,6 +316,20 @@ pub(crate) fn git_output(command: &mut Command) -> Result<Output, String> {
     command.output().map_err(command_error)
 }
 
+/// 同 `git_output`，但把 `input` 写进标准输入。调用前不用自己设置 stdin。
+pub(crate) fn git_output_stdin(command: &mut Command, input: &[u8]) -> Result<Output, String> {
+    use std::io::Write;
+    command.stdin(Stdio::piped());
+    let _slot = GitSlot::acquire();
+    let mut child = command.spawn().map_err(command_error)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input).map_err(command_error)?;
+        // 关掉管道，Git 才能读到 EOF。
+        drop(stdin);
+    }
+    child.wait_with_output().map_err(command_error)
+}
+
 struct GitSlot;
 
 impl GitSlot {

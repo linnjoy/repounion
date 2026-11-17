@@ -1,6 +1,6 @@
 import { reactive } from "vue";
 import * as api from "./api";
-import type { FetchFailure, FilterId, RepoStatus, Workspace } from "./types";
+import type { DiffLayout, FetchFailure, FilterId, RepoStatus, Workspace } from "./types";
 
 export interface MenuState {
   path: string;
@@ -33,6 +33,9 @@ export const ui = reactive({
   confirmRemovePath: null as string | null,
   menu: null as MenuState | null,
   wsMenuId: null as string | null,
+  detailPath: null as string | null,
+  detailWidth: 720,
+  diffLayout: "side" as DiffLayout,
 });
 
 let generation = 0;
@@ -101,6 +104,7 @@ export async function selectWorkspace(id: string) {
   ui.refreshedAt = null;
   ui.failures = [];
   ui.banner = null;
+  ui.detailPath = null;
   ui.menu = null;
   ui.wsMenuId = null;
   ui.fetching = false;
@@ -310,6 +314,9 @@ export async function removeRepo(path: string) {
     const workspace = await api.removeRepo(id, path);
     replaceWorkspace(workspace);
     ui.statuses = ui.statuses.filter((item) => item.path !== path);
+    if (ui.detailPath === path) {
+      ui.detailPath = null;
+    }
     ui.confirmRemovePath = null;
     ui.menu = null;
     toast("已从工作区移除");

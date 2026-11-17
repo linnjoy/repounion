@@ -7,10 +7,11 @@ use tauri::State;
 
 use repounion_core::{
     absorb_discovered, add_standalone, commit_folder, create_workspace as create_ws,
-    delete_workspace as delete_ws, fetch_all as fetch_repos, load_state, normalize_dir,
-    normalize_repo, query_statuses, remove_repo as remove_from_ws, rename_workspace as rename_ws,
-    save_state, scan_folder, scan_git_repos, set_active, set_auto_scan, workspace_mut, AppState,
-    FetchReport, ScanReport, StatusReport, Workspace,
+    delete_workspace as delete_ws, fetch_all as fetch_repos, list_changes, load_file_diff,
+    load_state, normalize_dir, normalize_repo, query_statuses, remove_repo as remove_from_ws,
+    rename_workspace as rename_ws, save_state, scan_folder, scan_git_repos, set_active,
+    set_auto_scan, workspace_mut, AppState, ChangeList, FetchReport, FileDiff, ScanReport,
+    StatusReport, Workspace,
 };
 
 use crate::open_external::{open_folder, open_terminal, open_vscode};
@@ -284,6 +285,33 @@ pub async fn fetch_all(
     tauri::async_runtime::spawn_blocking(move || fetch_repos(&paths))
         .await
         .map_err(|err| format!("Fetch 任务失败：{err}"))
+}
+
+/// 只读取这一个仓库的改动文件，不预取 diff。
+#[tauri::command]
+pub async fn list_repo_changes(path: String, mode: String) -> Result<ChangeList, String> {
+    match tauri::async_runtime::spawn_blocking(move || list_changes(&path, &mode)).await {
+        Ok(result) => result,
+        Err(err) => Err(format!("读取改动失败：{err}")),
+    }
+}
+
+/// 只读取当前这一个文件的左右内容和差异。
+#[tauri::command]
+pub async fn load_file_diff(
+    path: String,
+    mode: String,
+    file_path: String,
+    old_path: Option<String>,
+) -> Result<FileDiff, String> {
+    match tauri::async_runtime::spawn_blocking(move || {
+        load_file_diff(&path, &mode, &file_path, old_path)
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(err) => Err(format!("读取差异失败：{err}")),
+    }
 }
 
 #[tauri::command]

@@ -42,6 +42,8 @@ pub fn run() {
             commands::remove_repo,
             commands::refresh_status,
             commands::fetch_all,
+            commands::list_repo_changes,
+            commands::load_file_diff,
             commands::open_in_folder,
             commands::open_in_vscode,
             commands::open_in_terminal,
