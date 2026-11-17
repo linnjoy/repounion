@@ -7,11 +7,11 @@ use tauri::State;
 
 use repounion_core::{
     absorb_discovered, add_standalone, commit_folder, create_workspace as create_ws,
-    delete_workspace as delete_ws, fetch_all as fetch_repos, list_changes, load_file_diff,
-    load_state, normalize_dir, normalize_repo, query_statuses, remove_repo as remove_from_ws,
-    rename_workspace as rename_ws, save_state, scan_folder, scan_git_repos, set_active,
-    set_auto_scan, workspace_mut, AppState, ChangeList, FetchReport, FileDiff, ScanReport,
-    StatusReport, Workspace,
+    delete_workspace as delete_ws, fetch_all as fetch_repos, list_changes,
+    load_file_diff as read_file_diff, load_state, normalize_dir, normalize_repo, query_statuses,
+    remove_repo as remove_from_ws, rename_workspace as rename_ws, save_state, scan_folder,
+    scan_git_repos, set_active, set_auto_scan, workspace_mut, AppState, ChangeList, FetchReport,
+    FileDiff, ScanReport, StatusReport, Workspace,
 };
 
 use crate::open_external::{open_folder, open_terminal, open_vscode};
@@ -305,7 +305,7 @@ pub async fn load_file_diff(
     old_path: Option<String>,
 ) -> Result<FileDiff, String> {
     match tauri::async_runtime::spawn_blocking(move || {
-        load_file_diff(&path, &mode, &file_path, old_path)
+        read_file_diff(&path, &mode, &file_path, old_path)
     })
     .await
     {
