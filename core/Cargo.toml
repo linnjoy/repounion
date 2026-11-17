@@ -1,0 +1,16 @@
+[package]
+name = "repounion-core"
+version = "0.1.0"
+edition = "2021"
+description = "RepoUnion 工作区、目录扫描与 Git 状态"
+publish = false
+
+[dependencies]
+dirs = "5"
+dunce = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tempfile = "3"
