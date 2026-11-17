@@ -4,6 +4,7 @@
 
 #![forbid(unsafe_code)]
 
+mod changes;
 mod gitinfo;
 mod model;
 mod parallel;
@@ -11,6 +12,7 @@ mod paths;
 mod scan;
 mod store;
 
+pub use changes::{list_changes, load_file_diff, ChangeList, FileChange, FileDiff, HunkSpan};
 pub use gitinfo::{
     fetch_all, query_statuses, FetchFailure, FetchReport, RepoStatus, StatusReport, Tone,
     GIT_CONCURRENCY,

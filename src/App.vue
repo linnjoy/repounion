@@ -45,12 +45,17 @@ function onPointerDown(event: MouseEvent) {
 
 function onKeyDown(event: KeyboardEvent) {
   if (event.key === "Escape") {
+    const dialogOpen =
+      ui.folderDialog || ui.nameDialog || ui.menu || ui.wsMenuId || ui.confirmDeleteId || ui.confirmRemovePath;
     ui.folderDialog = false;
     ui.nameDialog = null;
     ui.menu = null;
     ui.wsMenuId = null;
     ui.confirmDeleteId = null;
     ui.confirmRemovePath = null;
+    if (!dialogOpen) {
+      ui.detailPath = null;
+    }
   }
   if (event.key === "F5" && workspace.value) {
     event.preventDefault();

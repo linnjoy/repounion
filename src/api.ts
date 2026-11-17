@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppState,
+  ChangeList,
+  CompareMode,
   FetchReport,
+  FileDiff,
   OpenResult,
   RescanResult,
   ScanReport,
@@ -69,6 +72,19 @@ export function refreshStatus(workspaceId: string): Promise<StatusReport> {
 
 export function fetchAll(workspaceId: string): Promise<FetchReport> {
   return invoke("fetch_all", { workspaceId });
+}
+
+export function listRepoChanges(path: string, mode: CompareMode): Promise<ChangeList> {
+  return invoke("list_repo_changes", { path, mode });
+}
+
+export function loadFileDiff(
+  path: string,
+  mode: CompareMode,
+  filePath: string,
+  oldPath: string | null,
+): Promise<FileDiff> {
+  return invoke("load_file_diff", { path, mode, filePath, oldPath });
 }
 
 export function openInFolder(path: string): Promise<void> {
