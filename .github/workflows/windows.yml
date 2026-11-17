@@ -70,6 +70,7 @@ jobs:
         with:
           name: repounion-windows
           if-no-files-found: error
+          # Cargo 工作区把产物放在仓库根的 target，而不是 src-tauri/target。
           path: |
-            src-tauri/target/release/bundle/msi/*.msi
-            src-tauri/target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
