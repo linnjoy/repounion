@@ -51,9 +51,9 @@ Rust 版本由仓库根的 `rust-toolchain.toml` 固定，rustup 会自动切换
 
 ## 从 Actions 下载安装包
 
-推送到 `main`、打开指向 `main` 的拉取请求，或在 GitHub 的 Actions 页面手动运行「Windows 打包」之后，打开该次运行，在 Artifacts 里下载 `repounion-windows`。压缩包里有 WiX 的 `.msi` 和 NSIS 的安装程序 `.exe`。
+在 GitHub Actions 页面手动运行「Windows 打包」，完成后在 Artifacts 下载 `repounion-windows`，内含 `.msi` 与 NSIS `.exe` 安装包。PR 更新只执行构建检查与测试，不生成安装包；仅修改 Markdown、docs/ 或 LICENSE 时跳过。相同 PR 的新提交会取消旧检查。合并或推送 main 不再自动运行。
 
-推送 `v*` 标签时，同一次工作流会把这两份安装包附到对应的 GitHub Release。这个仓库不会自动创建标签或 Release。
+推送 `v*` 标签时，同一次工作流会把这两份安装包附到对应的 GitHub Release。标签需要手动推送，检查通过后工作流自动创建 Release 并上传安装包。
 
 只编译前端：
 
