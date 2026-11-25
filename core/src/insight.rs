@@ -155,10 +155,10 @@ pub(crate) fn read_worktrees(repo: &Path) -> Result<(Vec<WorktreeInfo>, Vec<Stri
     }
     let output = run_in(repo, &["worktree", "list", "--porcelain"])?;
     let mut worktrees = parse_worktree_list(&String::from_utf8_lossy(&output.stdout));
-    let self_key = crate::paths::path_key(repo);
     // 只保留「其他」工作区：当前仓库是主工作区时排除主工作区，
     // 当前仓库本身是 linked worktree 时排除它自己，主工作区作为其他工作区保留。
-    worktrees.retain(|tree| crate::paths::path_key(Path::new(&tree.path)) != self_key);
+    // 必须按真实路径比较：Git 输出长路径，而传入的仓库路径可能是 8.3 短名等其他写法。
+    worktrees.retain(|tree| !crate::paths::same_dir(Path::new(&tree.path), repo));
     let mut status_lines = Vec::new();
     for tree in worktrees.iter_mut() {
         if tree.prunable || !Path::new(&tree.path).exists() {

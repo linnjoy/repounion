@@ -45,6 +45,17 @@ pub fn path_key(path: &Path) -> String {
     }
 }
 
+/// 判断两个路径是否指向磁盘上的同一个目录。
+///
+/// 只比较字符串不够：Windows 上同一目录可能写成 8.3 短名（如 `RUNNER~1`）、带 `.` 段或大小写不同，
+/// 而 Git 输出的总是长路径。这里先解析成真实路径再比较；路径不存在等无法解析时退回字符串比较。
+pub fn same_dir(left: &Path, right: &Path) -> bool {
+    match (dunce::canonicalize(left), dunce::canonicalize(right)) {
+        (Ok(left), Ok(right)) => path_key(&left) == path_key(&right),
+        _ => path_key(left) == path_key(right),
+    }
+}
+
 pub fn repo_name(path: &str) -> String {
     Path::new(path)
         .file_name()

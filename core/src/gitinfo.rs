@@ -1073,6 +1073,13 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         assert!(status.protected_risk, "保护分支上有未提交改动应警告");
         assert!(!status.fingerprint.is_empty());
         assert!(status.last_commit_at.is_some());
+
+        // 同一仓库换一种写法（带 `.` 段，等同于 CI 上 8.3 短名这类非规范路径），
+        // 不能因为和 Git 输出的长路径字符串不同，就把自己当成另一个 worktree。
+        let odd = root.path().join(".").join("local");
+        let again = status_of(&odd.to_string_lossy(), &protected);
+        assert_eq!(again.worktrees.len(), 1, "{:?}", again.worktrees);
+        assert_eq!(again.worktrees[0].branch.as_deref(), Some("agent/task"));
     }
 
     #[test]
