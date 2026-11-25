@@ -29,6 +29,10 @@ export const ui = reactive({
   cancelling: false,
   /** 本轮刷新或 Fetch 中还没出结果的仓库，键为仓库路径。 */
   pending: {} as Record<string, boolean>,
+  /** 收工检查对话框是否打开。 */
+  wrapUpOpen: false,
+  /** 正在编辑保护分支的工作区 id。 */
+  protectedDialogId: null as string | null,
   banner: null as string | null,
   failures: [] as FetchFailure[],
   toast: null as string | null,
@@ -262,6 +266,48 @@ export async function fetchAll() {
       ui.cancelling = false;
       ui.pending = {};
     }
+  }
+}
+
+/**
+ * 标记仓库已查看。只提交界面上当前显示的指纹：
+ * 如果刚好在刷新间隙仓库又变了，下次刷新仍会提示，不会被这次确认吞掉。
+ */
+export async function ackRepos(paths: string[]) {
+  const wanted = new Set(paths);
+  const targets = ui.statuses.filter((item) => wanted.has(item.path) && item.ok && item.fingerprint);
+  if (targets.length === 0) {
+    return;
+  }
+  try {
+    await api.ackRepos(targets.map((item) => ({ path: item.path, fingerprint: item.fingerprint })));
+    for (const item of targets) {
+      item.changedSinceAck = false;
+    }
+  } catch (error) {
+    ui.banner = messageOf(error);
+  }
+}
+
+/** 把当前工作区所有「有新变化」的仓库标记为已查看。 */
+export async function ackAllChanged() {
+  await ackRepos(ui.statuses.filter((item) => item.changedSinceAck).map((item) => item.path));
+}
+
+export async function saveProtectedBranches(id: string, text: string): Promise<string | null> {
+  // 支持逗号、空格或换行分隔，便于直接粘贴。
+  const patterns = text.split(/[\s,，]+/).filter((item) => item.length > 0);
+  try {
+    const workspace = await api.setProtectedBranches(id, patterns);
+    replaceWorkspace(workspace);
+    ui.protectedDialogId = null;
+    toast("已保存保护分支规则");
+    if (id === ui.activeWorkspaceId) {
+      await refresh();
+    }
+    return null;
+  } catch (error) {
+    return messageOf(error);
   }
 }
 

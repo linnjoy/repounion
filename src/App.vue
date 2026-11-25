@@ -4,6 +4,7 @@ import { computed, onMounted, onUnmounted } from "vue";
 import AddFolderDialog from "./components/AddFolderDialog.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
 import NameDialog from "./components/NameDialog.vue";
+import ProtectedDialog from "./components/ProtectedDialog.vue";
 import Sidebar from "./components/Sidebar.vue";
 import WorkspaceBoard from "./components/WorkspaceBoard.vue";
 import {
@@ -20,6 +21,9 @@ import {
 import { repoName } from "./types";
 
 const workspace = computed(() => activeWorkspace());
+const protectedWorkspace = computed(
+  () => ui.workspaces.find((item) => item.id === ui.protectedDialogId) ?? null,
+);
 const deleting = computed(() => ui.workspaces.find((item) => item.id === ui.confirmDeleteId) ?? null);
 const removing = computed(() => {
   const path = ui.confirmRemovePath;
@@ -114,6 +118,12 @@ onUnmounted(() => {
   </div>
 
   <AddFolderDialog v-if="ui.folderDialog && workspace" />
+
+  <ProtectedDialog
+    v-if="protectedWorkspace"
+    :workspace="protectedWorkspace"
+    @cancel="ui.protectedDialogId = null"
+  />
 
   <NameDialog
     v-if="ui.nameDialog?.mode === 'create'"

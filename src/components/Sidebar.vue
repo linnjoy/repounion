@@ -43,6 +43,12 @@ function rename(workspace: Workspace) {
   ui.nameDialog = { mode: "rename", id: workspace.id, name: workspace.name };
 }
 
+function editProtected(id: string) {
+  ui.wsMenuId = null;
+  ui.menu = null;
+  ui.protectedDialogId = id;
+}
+
 function askDelete(id: string) {
   ui.wsMenuId = null;
   ui.menu = null;
@@ -82,6 +88,7 @@ function askDelete(id: string) {
       :style="{ left: `${ui.menu.x}px`, top: `${ui.menu.y}px` }"
     >
       <button v-if="menuWorkspace" type="button" @click="rename(menuWorkspace)">重命名</button>
+      <button v-if="menuWorkspace" type="button" @click="editProtected(menuWorkspace.id)">保护分支…</button>
       <button v-if="menuWorkspace" type="button" class="danger" @click="askDelete(menuWorkspace.id)">删除工作区</button>
     </div>
   </aside>

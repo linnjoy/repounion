@@ -9,6 +9,33 @@ export interface Workspace {
   name: string;
   sources: SourceDirectory[];
   standaloneRepos: string[];
+  /** 保护分支规则，`*` 匹配任意字符。 */
+  protectedBranches: string[];
+}
+
+/** 本地分支的推送情况。 */
+export interface BranchInfo {
+  name: string;
+  oid: string;
+  isCurrent: boolean;
+  upstream: string | null;
+  /** 上游分支已在远端删除。 */
+  upstreamGone: boolean;
+  ahead: number;
+  behind: number;
+  /** 不在任何远端上的提交数；null 表示未统计（无远端或分支过多）。 */
+  unpushed: number | null;
+  lastCommitAt: number | null;
+}
+
+/** 当前仓库之外的其他工作区。 */
+export interface WorktreeInfo {
+  path: string;
+  branch: string | null;
+  head: string;
+  /** 有改动的文件数；null 表示读取失败。 */
+  changedFiles: number | null;
+  prunable: boolean;
 }
 
 export interface SourceDirectory {
@@ -38,6 +65,25 @@ export interface RepoStatus {
   workspaceLabel: string;
   remoteLabel: string;
   tone: Tone;
+  /** 未跟踪条目数（已包含在 changedFiles 里）。 */
+  untrackedFiles: number;
+  stashCount: number;
+  branches: BranchInfo[];
+  /** 除当前分支外有未推送提交的分支数。 */
+  otherUnpushedBranches: number;
+  hasRemote: boolean;
+  worktrees: WorktreeInfo[];
+  headOid: string;
+  lastCommitAt: number | null;
+  onProtectedBranch: boolean;
+  /** 在保护分支上有改动或未推送提交。 */
+  protectedRisk: boolean;
+  /** 本地状态指纹，用于「标记已查看」。 */
+  fingerprint: string;
+  /** 上次标记已查看之后有新变化。 */
+  changedSinceAck: boolean;
+  /** 附加信息读取失败的说明。 */
+  notes: string[];
 }
 
 export interface StatusReport {
@@ -90,7 +136,7 @@ export interface RescanResult {
   added: number;
 }
 
-export type FilterId = "all" | "dirty" | "unsynced" | "conflict" | "noUpstream";
+export type FilterId = "all" | "changed" | "wrapUp" | "dirty" | "unsynced" | "conflict" | "noUpstream";
 
 export type CompareMode = "worktreeHead" | "worktreeIndex" | "indexHead" | "localUpstream";
 
@@ -146,10 +192,55 @@ export function repoName(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+/** 「收工检查」里的一条待办。一个仓库可能有多条，粒度到分支。 */
+export interface WrapUpItem {
+  kind: "uncommitted" | "unpushed" | "stash" | "protected" | "worktree";
+  /** 涉及的分支或 worktree 路径；仓库级的条目为 null。 */
+  target: string | null;
+  text: string;
+}
+
+/**
+ * 列出一个仓库还没收尾的事项。规则与产品目标的痛点 a / c 对应：
+ * 未提交改动、任何本地分支上的未推送提交、stash、保护分支风险、有改动的其他 worktree。
+ */
+export function wrapUpItems(item: RepoStatus): WrapUpItem[] {
+  if (!item.ok) {
+    return [];
+  }
+  const items: WrapUpItem[] = [];
+  if (item.protectedRisk) {
+    items.push({ kind: "protected", target: item.branch, text: `在保护分支 ${item.branch} 上有改动或未推送提交` });
+  }
+  if (item.changedFiles > 0 || item.conflictFiles > 0) {
+    const untracked = item.untrackedFiles > 0 ? `（其中未跟踪 ${item.untrackedFiles}）` : "";
+    items.push({ kind: "uncommitted", target: item.branch, text: `${item.changedFiles + item.conflictFiles} 个文件未提交${untracked}` });
+  }
+  for (const branch of item.branches) {
+    if ((branch.unpushed ?? 0) > 0) {
+      const how = branch.upstream && !branch.upstreamGone ? `超前 ${branch.upstream}` : "从未推送到任何远端";
+      items.push({ kind: "unpushed", target: branch.name, text: `${branch.unpushed} 个提交未推送（${how}）` });
+    }
+  }
+  if (item.stashCount > 0) {
+    items.push({ kind: "stash", target: null, text: `${item.stashCount} 个 stash` });
+  }
+  for (const tree of item.worktrees) {
+    if ((tree.changedFiles ?? 0) > 0) {
+      items.push({ kind: "worktree", target: tree.path, text: `worktree ${tree.branch ?? "游离"} 有 ${tree.changedFiles} 个文件未提交` });
+    }
+  }
+  return items;
+}
+
 export function matchesFilter(item: RepoStatus, filter: FilterId): boolean {
   switch (filter) {
     case "all":
       return true;
+    case "changed":
+      return item.changedSinceAck;
+    case "wrapUp":
+      return wrapUpItems(item).length > 0;
     case "dirty":
       return item.tone === "dirty";
     case "unsynced":

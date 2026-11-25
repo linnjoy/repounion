@@ -12,7 +12,7 @@ RepoUnion 是一个 Windows 桌面应用，用来同时查看多个 Git 仓库�
 - [Node.js 20+](https://nodejs.org/)（自带 npm；也可以改用 pnpm）
 - [rustup](https://rustup.rs/)。具体 Rust 版本由仓库根的 `rust-toolchain.toml` 固定，进入仓库后 rustup 会自动使用
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，勾选「使用 C++ 的桌面开发」
-- 已加入 PATH 的 [Git](https://git-scm.com/)
+- 已加入 PATH 的 [Git](https://git-scm.com/) 2.35 或更新
 
 Linux 上开发还需要 WebKitGTK，例如 Ubuntu：
 
@@ -75,7 +75,8 @@ cargo test -p repounion-core
 - Linux：`~/.config/RepoUnion/config.json`
 - macOS：`~/Library/Application Support/RepoUnion/config.json`
 
-文件里有工作区、来源目录（含是否自动扫描）、单独添加的仓库，以及每个来源的排除清单。
+文件里有工作区、来源目录（含是否自动扫描）、单独添加的仓库、每个来源的排除清单，以及每个工作区的保护分支规则。
+配置格式当前为第 2 版；旧版配置打开时会自动补上默认保护分支，下次保存时升级。更新版本程序写入的配置，旧程序会拒绝打开，避免丢字段。
 
 ## 状态怎么读
 
@@ -104,6 +105,25 @@ cargo test -p repounion-core
 | 灰 | 干净，但没有上游分支 |
 
 冲突或分叉优先于「有改动」。有改动优先于「没有上游」。筛选里的「有改动」「未同步」「冲突」和顶部汇总用的是同一套优先级；「无上游」可以和「有改动」同时成立。
+
+## 看清还没收尾的地方
+
+每次刷新除了当前分支，还会读取下面这些本地信息（都不联网）：
+
+- **所有本地分支的未推送提交**：有上游的分支看超前数；没有上游或上游已删除的分支，统计不在任何远端引用上的提交数。
+  纯本地仓库（没有任何远端）不统计。每个仓库最多对 30 个无上游分支单独统计。
+- **stash 数量**：使用 `git status --show-stash`，需要 Git 2.35 或更新。
+- **其他 worktree**：同一仓库的 linked worktree 及其中未提交的文件数，方便发现 agent 在 worktree 里留下的改动。
+- **保护分支**：每个工作区可在左侧工作区菜单「保护分支…」里设置规则，默认 `main`、`master`、`release/*`，
+  `*` 匹配任意字符。当前分支命中规则且有未提交改动或未推送提交时，行内显示「⚠ 保护分支」。
+- **有新变化**：记住你上次「标记已查看」时每个仓库的状态，之后 HEAD、任何本地分支、stash、改动文件
+  （包括已改文件再次被修改）或其他 worktree 的改动发生变化，就显示「● 有新变化」，直到你再次标记。
+  第一次见到的仓库以当时状态为基准，不会提示。Fetch 只改远端引用，不会触发这个提示。
+
+顶部「收工检查」按仓库、分支列出所有还没收尾的事项：未提交改动、未推送提交、stash、保护分支上的改动、
+有改动的其他 worktree。筛选条的「有新变化」「未收尾」也可以只看这些仓库。
+
+「有新变化」的基准保存在 `%APPDATA%\RepoUnion\snapshots.json`，和工作区配置分开。删除它只会让所有仓库重新建立基准。
 
 ## 查看改动
 

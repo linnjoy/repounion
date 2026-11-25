@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import RepoDetail from "./RepoDetail.vue";
+import WrapUpDialog from "./WrapUpDialog.vue";
 import {
+  ackAllChanged,
+  ackRepos,
   addRepo,
   cancelFetch,
   fetchAll,
@@ -13,12 +16,23 @@ import {
   setAutoScan,
   ui,
 } from "../state";
-import { matchesFilter, repoName, summarize, type FilterId, type RepoStatus, type SourceDirectory, type Workspace } from "../types";
+import {
+  matchesFilter,
+  repoName,
+  summarize,
+  wrapUpItems,
+  type FilterId,
+  type RepoStatus,
+  type SourceDirectory,
+  type Workspace,
+} from "../types";
 
 const props = defineProps<{ workspace: Workspace }>();
 
 const filters: { id: FilterId; label: string }[] = [
   { id: "all", label: "全部" },
+  { id: "changed", label: "有新变化" },
+  { id: "wrapUp", label: "未收尾" },
   { id: "dirty", label: "有改动" },
   { id: "unsynced", label: "未同步" },
   { id: "conflict", label: "冲突" },
@@ -183,6 +197,58 @@ async function onAutoScan(source: SourceDirectory, event: Event) {
 
 const busy = computed(() => ui.refreshing || ui.fetching);
 const pendingCount = computed(() => Object.keys(ui.pending).length);
+const changedCount = computed(() => ownedStatuses.value.filter((item) => item.changedSinceAck).length);
+const wrapUpCount = computed(() => ownedStatuses.value.filter((item) => wrapUpItems(item).length > 0).length);
+const ownedPaths = computed(() =>
+  props.workspace.sources.flatMap((source) => source.repos).concat(props.workspace.standaloneRepos),
+);
+
+interface Badge {
+  text: string;
+  cls: string;
+  title: string;
+}
+
+/**
+ * 行内附加标记：有新变化、保护分支风险、其他分支未推送、stash、worktree。
+ * 正式视觉方案待设计交接后替换，这里只保证信息可见。
+ */
+function badgesOf(path: string): Badge[] {
+  const status = statusMap.value.get(path);
+  if (!status || !status.ok) {
+    return [];
+  }
+  const badges: Badge[] = [];
+  if (status.changedSinceAck) {
+    badges.push({ text: "● 有新变化", cls: "info", title: "上次标记已查看之后，HEAD、分支或改动发生了变化" });
+  }
+  if (status.protectedRisk) {
+    badges.push({ text: "⚠ 保护分支", cls: "danger", title: `在保护分支 ${status.branch} 上有改动或未推送提交` });
+  }
+  if (status.otherUnpushedBranches > 0) {
+    const names = status.branches
+      .filter((branch) => !branch.isCurrent && (branch.unpushed ?? 0) > 0)
+      .map((branch) => `${branch.name}（${branch.unpushed}）`)
+      .join("、");
+    badges.push({ text: `另 ${status.otherUnpushedBranches} 分支未推送`, cls: "warn", title: names });
+  }
+  if (status.stashCount > 0) {
+    badges.push({ text: `stash ${status.stashCount}`, cls: "neutral", title: `${status.stashCount} 个 stash` });
+  }
+  if (status.worktrees.length > 0) {
+    const dirty = status.worktrees.filter((tree) => (tree.changedFiles ?? 0) > 0).length;
+    const list = status.worktrees.map((tree) => `${tree.branch ?? "游离"}  ${tree.path}`).join("\n");
+    badges.push({
+      text: dirty > 0 ? `worktree ${status.worktrees.length}·${dirty} 有改动` : `worktree ${status.worktrees.length}`,
+      cls: dirty > 0 ? "warn" : "neutral",
+      title: list,
+    });
+  }
+  if (status.notes.length > 0) {
+    badges.push({ text: "部分信息未读取", cls: "neutral", title: status.notes.join("\n") });
+  }
+  return badges;
+}
 const dragging = ref(false);
 
 function openDetail(path: string) {
@@ -234,6 +300,10 @@ function startDrag(event: PointerEvent) {
             {{ ui.cancelling ? "正在取消…" : `取消 Fetch（剩 ${pendingCount}）` }}
           </button>
           <button v-else type="button" class="btn" :disabled="busy" @click="fetchAll">Fetch 全部</button>
+          <button v-if="changedCount > 0" type="button" class="btn" @click="ackAllChanged">
+            全部标记已查看（{{ changedCount }}）
+          </button>
+          <button type="button" class="btn" @click="ui.wrapUpOpen = true">收工检查（{{ wrapUpCount }}）</button>
           <button type="button" class="btn" @click="addRepo">添加仓库</button>
           <button type="button" class="btn primary" @click="ui.folderDialog = true">添加目录</button>
         </div>
@@ -302,7 +372,13 @@ function startDrag(event: PointerEvent) {
               {{ workspaceText(path) }}
             </div>
             <div class="sync-text" :class="remoteClass(statusMap.get(path))">{{ remoteText(path) }}</div>
-            <div class="repo-path" :title="path">{{ path }}</div>
+            <!-- 有附加标记时占用路径列显示标记，路径改到悬停提示里。 -->
+            <div v-if="badgesOf(path).length" class="repo-badges" :title="path">
+              <span v-for="badge in badgesOf(path)" :key="badge.text" class="pill" :class="badge.cls" :title="badge.title">
+                {{ badge.text }}
+              </span>
+            </div>
+            <div v-else class="repo-path" :title="path">{{ path }}</div>
             <button type="button" class="more" :class="{ on: ui.menu?.path === path }" title="操作" @click.stop="openMenu($event, path)">⋯</button>
           </article>
         </div>
@@ -328,7 +404,13 @@ function startDrag(event: PointerEvent) {
               {{ workspaceText(path) }}
             </div>
             <div class="sync-text" :class="remoteClass(statusMap.get(path))">{{ remoteText(path) }}</div>
-            <div class="repo-path" :title="path">{{ path }}</div>
+            <!-- 有附加标记时占用路径列显示标记，路径改到悬停提示里。 -->
+            <div v-if="badgesOf(path).length" class="repo-badges" :title="path">
+              <span v-for="badge in badgesOf(path)" :key="badge.text" class="pill" :class="badge.cls" :title="badge.title">
+                {{ badge.text }}
+              </span>
+            </div>
+            <div v-else class="repo-path" :title="path">{{ path }}</div>
             <button type="button" class="more" :class="{ on: ui.menu?.path === path }" title="操作" @click.stop="openMenu($event, path)">⋯</button>
           </article>
         </div>
@@ -347,10 +429,18 @@ function startDrag(event: PointerEvent) {
       class="menu"
       :style="{ left: `${ui.menu.x}px`, top: `${ui.menu.y}px` }"
     >
+      <button
+        v-if="statusMap.get(ui.menu.path)?.changedSinceAck"
+        type="button"
+        @click="ackRepos([ui.menu.path]); ui.menu = null"
+      >
+        标记已查看
+      </button>
       <button type="button" @click="openFolder(ui.menu.path)">打开目录</button>
       <button type="button" @click="openVscode(ui.menu.path)">在 VS Code 中打开</button>
       <button type="button" @click="openTerminal(ui.menu.path)">在终端打开</button>
       <button type="button" class="danger" @click="askRemove(ui.menu.path)">从工作区移除</button>
     </div>
+    <WrapUpDialog v-if="ui.wrapUpOpen" :paths="ownedPaths" @close="ui.wrapUpOpen = false" />
   </section>
 </template>

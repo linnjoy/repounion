@@ -566,6 +566,34 @@ h1 {
 .row.active { background: #eff4ff; }
 /* 本轮刷新还没出结果的行先变淡，出结果后逐行恢复。正式视觉方案待设计交接后替换。 */
 .row.pending > :not(.stripe):not(.more) { opacity: 0.5; transition: opacity 0.15s; }
+
+/* P1 附加标记与收工检查。临时样式，正式视觉方案待设计交接后替换。 */
+.repo-badges {
+  display: flex;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.repo-badges .pill { font-size: 11px; padding: 1px 6px; flex: none; }
+.dialog.wrapup { width: min(720px, calc(100vw - 48px)); }
+.wrapup-body { max-height: 60vh; overflow: auto; }
+.wrapup-repo { padding: 8px 0 10px; border-top: 1px solid var(--line); }
+.wrapup-repo:first-child { border-top: 0; }
+.wrapup-repo-h { display: flex; align-items: center; gap: 8px; }
+.wrapup-actions { margin-left: auto; display: flex; gap: 10px; }
+.wrapup-repo ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.wrapup-repo li { margin: 2px 0; }
+.wrapup-repo li code { font-family: var(--mono); font-size: 12px; margin-right: 4px; }
+.wrapup-protected { color: var(--danger); font-weight: 600; }
+#protected-branches {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  resize: vertical;
+}
 .splitter {
   width: 6px;
   flex: none;
