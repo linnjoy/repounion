@@ -243,9 +243,10 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let real = root.path().join("real");
         touch_repo(&real);
-        let link = root.path().join("link");
+        // 目前只在 Unix 上验证符号链接；Windows 的目录联接（junction）尚未覆盖。
         #[cfg(unix)]
         {
+            let link = root.path().join("link");
             std::os::unix::fs::symlink(&real, &link).unwrap();
             let found = scan_git_repos(root.path()).unwrap();
             assert_eq!(found.len(), 1);
