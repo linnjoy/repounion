@@ -5,6 +5,7 @@
 
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+use std::sync::{Condvar, Mutex};
 
 use serde::Serialize;
 
@@ -264,8 +265,26 @@ pub fn status_of(path: &str) -> RepoStatus {
     }
 }
 
+/// Windows 上 `git.exe` 是控制台程序。不带 `CREATE_NO_WINDOW` 时，
+/// 每查一个仓库都会闪出一个黑色命令行窗口。
+pub(crate) fn hide_console_window(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = command;
+    }
+}
+
 fn git_available() -> bool {
-    Command::new("git")
+    let mut command = Command::new("git");
+    hide_console_window(&mut command);
+    let _slot = GitSlot::acquire();
+    command
         .arg("--version")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -275,8 +294,9 @@ fn git_available() -> bool {
         .unwrap_or(false)
 }
 
-fn git_command() -> Command {
+pub(crate) fn git_command() -> Command {
     let mut command = Command::new("git");
+    hide_console_window(&mut command);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -285,22 +305,69 @@ fn git_command() -> Command {
         .env("GCM_INTERACTIVE", "Never")
         .env_remove("GIT_DIR")
         .env_remove("GIT_WORK_TREE")
-        .env_remove("GIT_IMPLICIT_WORK_TREE");
+        .env_remove("GIT_IMPLICIT_WORK_TREE")
+        .env_remove("GIT_EXTERNAL_DIFF");
     command
 }
+
+/// 跑一条已经配好的 Git 命令，并占用一个全局并发名额。
+pub(crate) fn git_output(command: &mut Command) -> Result<Output, String> {
+    let _slot = GitSlot::acquire();
+    command.output().map_err(command_error)
+}
+
+/// 同 `git_output`，但把 `input` 写进标准输入。调用前不用自己设置 stdin。
+pub(crate) fn git_output_stdin(command: &mut Command, input: &[u8]) -> Result<Output, String> {
+    use std::io::Write;
+    command.stdin(Stdio::piped());
+    let _slot = GitSlot::acquire();
+    let mut child = command.spawn().map_err(command_error)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin.write_all(input).map_err(command_error)?;
+        // 关掉管道，Git 才能读到 EOF。
+        drop(stdin);
+    }
+    child.wait_with_output().map_err(command_error)
+}
+
+struct GitSlot;
+
+impl GitSlot {
+    fn acquire() -> Self {
+        let mut guard = GIT_IN_FLIGHT.lock().expect("Git 并发锁已损坏");
+        while *guard >= GIT_CONCURRENCY {
+            guard = GIT_SLOT_CV.wait(guard).expect("Git 并发锁已损坏");
+        }
+        *guard += 1;
+        Self
+    }
+}
+
+impl Drop for GitSlot {
+    fn drop(&mut self) {
+        let mut guard = GIT_IN_FLIGHT.lock().expect("Git 并发锁已损坏");
+        *guard = guard.saturating_sub(1);
+        GIT_SLOT_CV.notify_one();
+    }
+}
+
+static GIT_IN_FLIGHT: Mutex<usize> = Mutex::new(0);
+static GIT_SLOT_CV: Condvar = Condvar::new();
 
 fn run_status(path: &Path) -> Result<ParsedStatus, String> {
     if !path.exists() {
         return Err("路径不存在".into());
     }
     // `--no-optional-locks` 尽量不写 index；默认的未跟踪模式把整个未跟踪目录算作一项。
-    let output = git_command()
-        .arg("--no-optional-locks")
-        .arg("-C")
-        .arg(path)
-        .args(["status", "--porcelain=v2", "--branch"])
-        .output()
-        .map_err(command_error)?;
+    let output = git_output(
+        git_command()
+            .arg("-c")
+            .arg("core.quotePath=true")
+            .arg("--no-optional-locks")
+            .arg("-C")
+            .arg(path)
+            .args(["status", "--porcelain=v2", "--branch"]),
+    )?;
     if !output.status.success() {
         return Err(stderr_brief(&output));
     }
@@ -313,12 +380,12 @@ fn run_fetch(path: &Path) -> Result<(), String> {
         return Err("路径不存在".into());
     }
     // `--all` 更新每个远端的引用；不带 merge，本地分支保持原样。
-    let output = git_command()
-        .arg("-C")
-        .arg(path)
-        .args(["fetch", "--all", "--prune", "--quiet"])
-        .output()
-        .map_err(command_error)?;
+    let output = git_output(
+        git_command()
+            .arg("-C")
+            .arg(path)
+            .args(["fetch", "--all", "--prune", "--quiet"]),
+    )?;
     if output.status.success() {
         Ok(())
     } else {
@@ -326,7 +393,7 @@ fn run_fetch(path: &Path) -> Result<(), String> {
     }
 }
 
-fn command_error(err: std::io::Error) -> String {
+pub(crate) fn command_error(err: std::io::Error) -> String {
     if err.kind() == std::io::ErrorKind::NotFound {
         "未找到 Git，请先安装并加入 PATH".to_string()
     } else {
@@ -334,7 +401,7 @@ fn command_error(err: std::io::Error) -> String {
     }
 }
 
-fn stderr_brief(output: &Output) -> String {
+pub(crate) fn stderr_brief(output: &Output) -> String {
     let text = String::from_utf8_lossy(&output.stderr);
     let line = text
         .lines()
@@ -518,19 +585,29 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
     }
 
     fn git_ok() -> bool {
-        Command::new("git")
+        let mut command = Command::new("git");
+        hide_console_window(&mut command);
+        command
             .arg("--version")
-            .output()
-            .map(|output| output.status.success())
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
             .unwrap_or(false)
     }
 
-    fn git(dir: &Path, args: &[&str]) {
-        let status = Command::new("git")
+    pub(crate) fn git(dir: &Path, args: &[&str]) {
+        let mut command = Command::new("git");
+        hide_console_window(&mut command);
+        let status = command
             .current_dir(dir)
             .args(args)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
             .env_remove("GIT_DIR")
             .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_IMPLICIT_WORK_TREE")
             .status()
             .unwrap();
         assert!(status.success(), "git {args:?} 失败");

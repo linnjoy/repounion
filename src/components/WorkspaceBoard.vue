@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import RepoDetail from "./RepoDetail.vue";
 import { addRepo, fetchAll, openFolder, openTerminal, openVscode, refresh, rescan, setAutoScan, ui } from "../state";
 import { matchesFilter, repoName, summarize, type FilterId, type RepoStatus, type SourceDirectory, type Workspace } from "../types";
 
@@ -170,6 +171,30 @@ async function onAutoScan(source: SourceDirectory, event: Event) {
 }
 
 const busy = computed(() => ui.refreshing || ui.fetching);
+const dragging = ref(false);
+
+function openDetail(path: string) {
+  ui.detailPath = path;
+}
+
+function startDrag(event: PointerEvent) {
+  event.preventDefault();
+  const startX = event.clientX;
+  const startWidth = ui.detailWidth;
+  dragging.value = true;
+  const move = (ev: PointerEvent) => {
+    const next = startWidth - (ev.clientX - startX);
+    const max = Math.max(520, window.innerWidth - 620);
+    ui.detailWidth = Math.min(max, Math.max(520, next));
+  };
+  const stop = () => {
+    dragging.value = false;
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", stop);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", stop);
+}
 </script>
 
 <template>
@@ -226,6 +251,7 @@ const busy = computed(() => ui.refreshing || ui.fetching);
       </ul>
     </div>
 
+    <div class="board-body">
     <div class="content">
       <p v-if="repoTotal === 0 && workspace.sources.length === 0" class="loading-line">
         这个工作区还是空的。可以添加单个仓库，或扫描一个目录。
@@ -248,7 +274,13 @@ const busy = computed(() => ui.refreshing || ui.fetching);
           <button type="button" class="linkish" @click="rescan(source.id)">重新扫描</button>
         </div>
         <div v-if="sourceVisible(source).length" class="list">
-          <article v-for="path in sourceVisible(source)" :key="path" class="row">
+          <article
+            v-for="path in sourceVisible(source)"
+            :key="path"
+            class="row"
+            :class="{ active: ui.detailPath === path }"
+            @click="openDetail(path)"
+          >
             <span class="stripe" :class="stripeClass(statusMap.get(path))" />
             <div class="repo-name" :title="repoName(path)">{{ statusMap.get(path)?.name ?? repoName(path) }}</div>
             <div class="branch" :title="branchText(path)">{{ branchText(path) }}</div>
@@ -268,7 +300,13 @@ const busy = computed(() => ui.refreshing || ui.fetching);
           <span class="meta">{{ workspace.standaloneRepos.length }} 个</span>
         </div>
         <div v-if="standaloneVisible.length" class="list">
-          <article v-for="path in standaloneVisible" :key="path" class="row">
+          <article
+            v-for="path in standaloneVisible"
+            :key="path"
+            class="row"
+            :class="{ active: ui.detailPath === path }"
+            @click="openDetail(path)"
+          >
             <span class="stripe" :class="stripeClass(statusMap.get(path))" />
             <div class="repo-name" :title="repoName(path)">{{ statusMap.get(path)?.name ?? repoName(path) }}</div>
             <div class="branch" :title="branchText(path)">{{ branchText(path) }}</div>
@@ -283,6 +321,11 @@ const busy = computed(() => ui.refreshing || ui.fetching);
       </section>
 
       <p v-if="repoTotal > 0 && !anyVisible" class="loading-line">没有符合筛选的仓库</p>
+    </div>
+    <template v-if="ui.detailPath">
+      <div class="splitter" :class="{ on: dragging }" title="拖动调整详情宽度" @pointerdown="startDrag" />
+      <RepoDetail :path="ui.detailPath" :width="ui.detailWidth" />
+    </template>
     </div>
 
     <div
