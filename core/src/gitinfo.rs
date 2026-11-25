@@ -120,6 +120,11 @@ pub struct RepoStatus {
     pub workspace_label: String,
     pub remote_label: String,
     pub tone: Tone,
+    /// 已跟踪改动按类型拆分（均已包含在 changed_files 里），用于列表的 M / A / D 徽标。
+    /// 重命名、复制、类型变化都计入修改。
+    pub modified_files: u32,
+    pub added_files: u32,
+    pub deleted_files: u32,
     /// 未跟踪的条目数（已包含在 changed_files 里）。
     pub untracked_files: u32,
     pub stash_count: u32,
@@ -148,6 +153,7 @@ pub struct RepoStatus {
 
 impl RepoStatus {
     fn from_parsed(path: &str, parsed: ParsedStatus) -> Self {
+        let kinds = ChangeKinds::of(&parsed.entries);
         let has_upstream = parsed.upstream.is_some();
         let diverged = has_upstream && parsed.ahead > 0 && parsed.behind > 0;
         let dirty = parsed.changed_files > 0;
@@ -215,6 +221,9 @@ impl RepoStatus {
             workspace_label,
             remote_label,
             tone,
+            modified_files: kinds.modified,
+            added_files: kinds.added,
+            deleted_files: kinds.deleted,
             untracked_files: parsed.untracked_files,
             stash_count: parsed.stash_count,
             branches: Vec::new(),
@@ -249,6 +258,9 @@ impl RepoStatus {
             workspace_label: "无法读取".to_string(),
             remote_label: "—".to_string(),
             tone: Tone::Error,
+            modified_files: 0,
+            added_files: 0,
+            deleted_files: 0,
             untracked_files: 0,
             stash_count: 0,
             branches: Vec::new(),
@@ -812,6 +824,39 @@ pub fn parse_porcelain_v2(text: &str) -> Result<ParsedStatus, String> {
     })
 }
 
+/// 已跟踪改动按类型计数。
+#[derive(Debug, Default, PartialEq, Eq)]
+struct ChangeKinds {
+    modified: u32,
+    added: u32,
+    deleted: u32,
+}
+
+impl ChangeKinds {
+    /// 只看 `1` / `2` 行（已跟踪改动）的 XY 两位状态码：
+    /// 任一侧为 D 记删除；暂存区为 A 记新增；其余（M、R、C、T 等）记修改。
+    /// 未跟踪（?）和冲突（u）另有计数，不在这里统计。
+    fn of(entries: &[String]) -> Self {
+        let mut kinds = Self::default();
+        for line in entries {
+            if !(line.starts_with("1 ") || line.starts_with("2 ")) {
+                continue;
+            }
+            let mut codes = line[2..].chars();
+            let index = codes.next().unwrap_or('.');
+            let worktree = codes.next().unwrap_or('.');
+            if index == 'D' || worktree == 'D' {
+                kinds.deleted += 1;
+            } else if index == 'A' {
+                kinds.added += 1;
+            } else {
+                kinds.modified += 1;
+            }
+        }
+        kinds
+    }
+}
+
 fn parse_ab(text: &str) -> Option<(u32, u32)> {
     let mut parts = text.split_whitespace();
     let ahead: i32 = parts.next()?.parse().ok()?;
@@ -941,6 +986,28 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         assert_eq!(parsed.untracked_files, 2);
         assert_eq!(parsed.changed_files, 3, "未跟踪项仍计入改动总数");
         assert_eq!(parsed.entries.len(), 3);
+    }
+
+    #[test]
+    fn classifies_tracked_changes_by_kind() {
+        let text = "\
+# branch.oid abc
+# branch.head main
+1 .M N... 100644 100644 100644 a b edited.txt
+1 M. N... 100644 100644 100644 a b staged.txt
+1 A. N... 000000 100644 100644 0 b new.txt
+1 AM N... 000000 100644 100644 0 b new-then-edited.txt
+1 .D N... 100644 100644 000000 a a removed.txt
+1 D. N... 100644 000000 000000 a 0 staged-removed.txt
+2 R. N... 100644 100644 100644 a b R100 renamed.txt\told.txt
+? untracked.txt
+";
+        let status = RepoStatus::from_parsed("/work/app", parse_porcelain_v2(text).unwrap());
+        assert_eq!(status.modified_files, 3, "修改、暂存修改、重命名");
+        assert_eq!(status.added_files, 2);
+        assert_eq!(status.deleted_files, 2);
+        assert_eq!(status.untracked_files, 1);
+        assert_eq!(status.changed_files, 8);
     }
 
     #[test]
