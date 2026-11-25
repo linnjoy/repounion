@@ -53,8 +53,17 @@ export interface FetchFailure {
 
 export interface FetchReport {
   gitMissing: boolean;
+  /** 本次 Fetch 是否被用户取消；已完成仓库的结果仍然有效。 */
+  cancelled: boolean;
   failures: FetchFailure[];
   items: RepoStatus[];
+}
+
+/** Fetch 过程中每完成一个仓库推送一次。 */
+export interface FetchProgress {
+  item: RepoStatus;
+  /** fetch 失败、超时或被取消的原因；本地状态仍已重新读取。 */
+  fetchError: string | null;
 }
 
 export interface ScanEntry {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { computed, onMounted, onUnmounted } from "vue";
 import AddFolderDialog from "./components/AddFolderDialog.vue";
 import ConfirmDialog from "./components/ConfirmDialog.vue";
@@ -11,6 +12,7 @@ import {
   createWorkspace,
   deleteWorkspace,
   refresh,
+  refreshOnFocus,
   removeRepo,
   renameWorkspace,
   ui,
@@ -63,15 +65,32 @@ function onKeyDown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => {
+let stopFocusListener: (() => void) | null = null;
+let unmounted = false;
+
+onMounted(async () => {
   window.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("keydown", onKeyDown);
   void boot();
+  // 切回窗口时只读刷新本地状态（不联网），节流规则在 refreshOnFocus 里。
+  const stop = await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+    if (focused) {
+      refreshOnFocus();
+    }
+  });
+  // 注册是异步的，组件可能已先卸载，这时立即注销。
+  if (unmounted) {
+    stop();
+  } else {
+    stopFocusListener = stop;
+  }
 });
 
 onUnmounted(() => {
+  unmounted = true;
   window.removeEventListener("pointerdown", onPointerDown);
   window.removeEventListener("keydown", onKeyDown);
+  stopFocusListener?.();
 });
 </script>
 

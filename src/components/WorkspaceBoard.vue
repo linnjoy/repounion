@@ -1,7 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import RepoDetail from "./RepoDetail.vue";
-import { addRepo, fetchAll, openFolder, openTerminal, openVscode, refresh, rescan, setAutoScan, ui } from "../state";
+import {
+  addRepo,
+  cancelFetch,
+  fetchAll,
+  openFolder,
+  openTerminal,
+  openVscode,
+  refresh,
+  rescan,
+  setAutoScan,
+  ui,
+} from "../state";
 import { matchesFilter, repoName, summarize, type FilterId, type RepoStatus, type SourceDirectory, type Workspace } from "../types";
 
 const props = defineProps<{ workspace: Workspace }>();
@@ -124,7 +135,7 @@ function workspaceText(path: string): string {
   if (status) {
     return status.workspaceLabel;
   }
-  return ui.refreshing || ui.fetching ? "读取中" : "尚未刷新";
+  return ui.pending[path] ? "读取中" : "尚未刷新";
 }
 
 function remoteText(path: string): string {
@@ -171,6 +182,7 @@ async function onAutoScan(source: SourceDirectory, event: Event) {
 }
 
 const busy = computed(() => ui.refreshing || ui.fetching);
+const pendingCount = computed(() => Object.keys(ui.pending).length);
 const dragging = ref(false);
 
 function openDetail(path: string) {
@@ -217,9 +229,11 @@ function startDrag(event: PointerEvent) {
           <button type="button" class="btn" :disabled="busy" @click="refresh">
             {{ ui.refreshing ? "正在刷新…" : "刷新状态" }}
           </button>
-          <button type="button" class="btn" :disabled="busy" @click="fetchAll">
-            {{ ui.fetching ? "正在 Fetch…" : "Fetch 全部" }}
+          <!-- Fetch 进行中时同一个按钮变成「取消」，避免再找第二个按钮。 -->
+          <button v-if="ui.fetching" type="button" class="btn" :disabled="ui.cancelling" @click="cancelFetch">
+            {{ ui.cancelling ? "正在取消…" : `取消 Fetch（剩 ${pendingCount}）` }}
           </button>
+          <button v-else type="button" class="btn" :disabled="busy" @click="fetchAll">Fetch 全部</button>
           <button type="button" class="btn" @click="addRepo">添加仓库</button>
           <button type="button" class="btn primary" @click="ui.folderDialog = true">添加目录</button>
         </div>
@@ -278,7 +292,7 @@ function startDrag(event: PointerEvent) {
             v-for="path in sourceVisible(source)"
             :key="path"
             class="row"
-            :class="{ active: ui.detailPath === path }"
+            :class="{ active: ui.detailPath === path, pending: ui.pending[path] }"
             @click="openDetail(path)"
           >
             <span class="stripe" :class="stripeClass(statusMap.get(path))" />
@@ -304,7 +318,7 @@ function startDrag(event: PointerEvent) {
             v-for="path in standaloneVisible"
             :key="path"
             class="row"
-            :class="{ active: ui.detailPath === path }"
+            :class="{ active: ui.detailPath === path, pending: ui.pending[path] }"
             @click="openDetail(path)"
           >
             <span class="stripe" :class="stripeClass(statusMap.get(path))" />
