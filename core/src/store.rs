@@ -21,10 +21,17 @@ pub fn save_state(path: &Path, state: &AppState) -> Result<(), String> {
     let json =
         serde_json::to_string_pretty(state).map_err(|err| format!("无法序列化配置：{err}"))?;
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, format!("{json}\n")).map_err(|err| format!("无法写入配置：{err}"))?;
-    if path.exists() {
-        std::fs::remove_file(path).map_err(|err| format!("无法替换配置：{err}"))?;
+    {
+        use std::io::Write;
+        let mut file = std::fs::File::create(&tmp).map_err(|err| format!("无法写入配置：{err}"))?;
+        file.write_all(format!("{json}\n").as_bytes())
+            .map_err(|err| format!("无法写入配置：{err}"))?;
+        // 先落盘再改名，避免断电后留下空文件。
+        file.sync_all()
+            .map_err(|err| format!("无法写入配置：{err}"))?;
     }
+    // 不能先删旧文件再改名：两步之间崩溃会丢掉整个配置。
+    // std::fs::rename 在 Windows 上使用 MoveFileExW + MOVEFILE_REPLACE_EXISTING，可直接覆盖。
     std::fs::rename(&tmp, path).map_err(|err| format!("无法替换配置：{err}"))?;
     Ok(())
 }
