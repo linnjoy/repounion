@@ -10,7 +10,7 @@ RepoUnion 是一个 Windows 桌面应用，用来同时查看多个 Git 仓库�
 
 - [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)（Windows 11 一般已经自带）
 - [Node.js 20+](https://nodejs.org/)（自带 npm；也可以改用 pnpm）
-- [rustup](https://rustup.rs/) 安装的 stable Rust（Tauri 2 需要 1.90 或更新）
+- [rustup](https://rustup.rs/)。具体 Rust 版本由仓库根的 `rust-toolchain.toml` 固定，进入仓库后 rustup 会自动使用
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)，勾选「使用 C++ 的桌面开发」
 - 已加入 PATH 的 [Git](https://git-scm.com/)
 
@@ -44,7 +44,10 @@ pnpm tauri dev
 npm run tauri build
 ```
 
-Windows 安装包在 `src-tauri/target/release/bundle/`。
+Windows 安装包在仓库根的 `target/release/bundle/`（`msi/` 和 `nsis/` 两个子目录）。
+根目录 `Cargo.toml` 是 Cargo 工作区，编译产物统一放在仓库根的 `target`，不在 `src-tauri/target`。
+
+Rust 版本由仓库根的 `rust-toolchain.toml` 固定，rustup 会自动切换到该版本。
 
 ## 从 Actions 下载安装包
 
@@ -78,8 +81,14 @@ cargo test -p repounion-core
 
 - **刷新状态**只在本地执行 `git status`，不访问网络。
 - **Fetch 全部**对每个仓库执行 `git fetch --all --prune`，只更新远端引用，不合并、不改工作区文件，然后再读一次本地状态。
-- 查询是并行的，同时最多 8 个 Git 进程。
-- 不会像编辑器那样监视父目录里的所有文件。想看最新状态，点刷新或 Fetch。
+- 查询是并行的，同时最多 8 个 Git 进程。每读完一个仓库就更新对应的一行，不用等全部完成。
+- 每个 Git 进程都有超时：本地命令 30 秒，fetch 120 秒。超时会终止该仓库的进程，不影响其他仓库。
+- Fetch 进行中可以点「取消 Fetch」：正在运行的进程会被终止，没开始的仓库跳过，本地状态照常重新读取。
+- Fetch 时如果你没有自己配置 SSH 程序（`GIT_SSH_COMMAND`、`GIT_SSH` 或 `core.sshCommand`），
+  会使用 `ssh -o BatchMode=yes`：需要确认主机指纹或输入密钥口令的仓库直接报错，不会在后台卡住。
+  遇到这种情况，先在终端里对该仓库手动执行一次 `git fetch`。
+- 窗口重新获得焦点时会自动刷新一次本地状态（不联网），30 秒内不重复。
+- 不会像编辑器那样监视父目录里的所有文件。
 - 在 Windows 上启动 Git 时带 `CREATE_NO_WINDOW`，刷新和 Fetch 不会再闪出命令行窗口。
 
 扫描目录时查找 `.git` 目录或 `gitdir:` 文件。会跳过 `node_modules`、`.git` 内部，以及 `target`、`dist`、`build` 这类常见构建产物目录里的嵌套仓库。

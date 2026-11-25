@@ -3,9 +3,13 @@
 //! 「刷新状态」只跑 `git status`，不访问网络。
 //! 「Fetch 全部」只执行 `git fetch`，不合并、不拉取到本地分支。
 
+use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
-use std::sync::{Condvar, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -14,6 +18,38 @@ use crate::paths::repo_name;
 
 /// 同时查询的仓库数量上限。
 pub const GIT_CONCURRENCY: usize = 8;
+
+/// 本地只读 Git 命令（status、cat-file、diff 等）的超时。
+/// 正常仓库远低于这个值；超时通常是仓库被锁、磁盘异常或 Git 钩子卡住。
+pub const LOCAL_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// 联网命令（fetch）的超时。超过后终止该仓库的 Git 进程，不影响其他仓库。
+pub const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// 没有用户自定义 SSH 程序时使用的非交互 SSH 命令。
+/// BatchMode 让主机指纹确认、密钥口令等提示直接失败，而不是在后台无限等待。
+const BATCH_SSH_COMMAND: &str = "ssh -o BatchMode=yes -o ConnectTimeout=15";
+
+/// 取消标志。前端点「取消」时置位，正在运行的 Git 进程会被终止，尚未开始的直接跳过。
+#[derive(Debug, Clone, Default)]
+pub struct CancelToken(Arc<AtomicBool>);
+
+impl CancelToken {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::SeqCst)
+    }
+}
+
+/// 取消时返回的错误文字，前端据此区分「失败」和「已取消」。
+pub const CANCELLED_MESSAGE: &str = "已取消";
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -189,11 +225,31 @@ pub struct FetchFailure {
 #[serde(rename_all = "camelCase")]
 pub struct FetchReport {
     pub git_missing: bool,
+    /// 本次 Fetch 是否被用户取消。取消后已完成的仓库结果仍然有效。
+    pub cancelled: bool,
     pub failures: Vec<FetchFailure>,
     pub items: Vec<RepoStatus>,
 }
 
+/// Fetch 过程中每完成一个仓库推送一次，前端逐行更新。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchProgress {
+    pub item: RepoStatus,
+    /// 该仓库 fetch 失败、超时或被取消时的原因；本地状态仍会重新读取。
+    pub fetch_error: Option<String>,
+}
+
 pub fn query_statuses(paths: &[String]) -> StatusReport {
+    query_statuses_with(paths, |_| {})
+}
+
+/// 读取本地状态。每完成一个仓库调用一次 `on_item`，调用顺序不保证与 `paths` 一致；
+/// 返回值中的 `items` 保持与 `paths` 相同的顺序。
+pub fn query_statuses_with<F>(paths: &[String], on_item: F) -> StatusReport
+where
+    F: Fn(&RepoStatus) + Sync,
+{
     if paths.is_empty() {
         return StatusReport {
             git_missing: false,
@@ -203,13 +259,14 @@ pub fn query_statuses(paths: &[String]) -> StatusReport {
     if !git_available() {
         return StatusReport {
             git_missing: true,
-            items: paths
-                .iter()
-                .map(|path| RepoStatus::failed(path, "未找到 Git，请先安装并加入 PATH".to_string()))
-                .collect(),
+            items: missing_git_items(paths),
         };
     }
-    let items = map_parallel(paths.to_vec(), GIT_CONCURRENCY, |path| status_of(&path));
+    let items = map_parallel(paths.to_vec(), GIT_CONCURRENCY, |path| {
+        let status = status_of(&path);
+        on_item(&status);
+        status
+    });
     StatusReport {
         git_missing: false,
         items,
@@ -217,9 +274,19 @@ pub fn query_statuses(paths: &[String]) -> StatusReport {
 }
 
 pub fn fetch_all(paths: &[String]) -> FetchReport {
+    fetch_all_with(paths, &CancelToken::new(), |_| {})
+}
+
+/// 对每个仓库 fetch 后重新读取本地状态。
+/// 某个仓库失败、超时或被取消不会影响其他仓库；取消后尚未开始的仓库跳过 fetch，只读本地状态。
+pub fn fetch_all_with<F>(paths: &[String], cancel: &CancelToken, on_item: F) -> FetchReport
+where
+    F: Fn(&FetchProgress) + Sync,
+{
     if paths.is_empty() {
         return FetchReport {
             git_missing: false,
+            cancelled: false,
             failures: Vec::new(),
             items: Vec::new(),
         };
@@ -227,17 +294,20 @@ pub fn fetch_all(paths: &[String]) -> FetchReport {
     if !git_available() {
         return FetchReport {
             git_missing: true,
+            cancelled: false,
             failures: Vec::new(),
-            items: paths
-                .iter()
-                .map(|path| RepoStatus::failed(path, "未找到 Git，请先安装并加入 PATH".to_string()))
-                .collect(),
+            items: missing_git_items(paths),
         };
     }
     let rows = map_parallel(paths.to_vec(), GIT_CONCURRENCY, |path| {
-        let fetch_error = run_fetch(Path::new(&path)).err();
+        let fetch_error = run_fetch(Path::new(&path), cancel).err();
         let status = status_of(&path);
-        (path, fetch_error, status)
+        let progress = FetchProgress {
+            item: status,
+            fetch_error,
+        };
+        on_item(&progress);
+        (path, progress.fetch_error, progress.item)
     });
     let mut failures = Vec::new();
     let mut items = Vec::with_capacity(rows.len());
@@ -253,9 +323,17 @@ pub fn fetch_all(paths: &[String]) -> FetchReport {
     }
     FetchReport {
         git_missing: false,
+        cancelled: cancel.is_cancelled(),
         failures,
         items,
     }
+}
+
+fn missing_git_items(paths: &[String]) -> Vec<RepoStatus> {
+    paths
+        .iter()
+        .map(|path| RepoStatus::failed(path, "未找到 Git，请先安装并加入 PATH".to_string()))
+        .collect()
 }
 
 pub fn status_of(path: &str) -> RepoStatus {
@@ -281,16 +359,10 @@ pub(crate) fn hide_console_window(command: &mut Command) {
 }
 
 fn git_available() -> bool {
-    let mut command = Command::new("git");
-    hide_console_window(&mut command);
-    let _slot = GitSlot::acquire();
-    command
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
+    let mut command = git_command();
+    command.arg("--version");
+    run_git(&mut command, None, LOCAL_TIMEOUT, None)
+        .map(|output| output.status.success())
         .unwrap_or(false)
 }
 
@@ -310,24 +382,104 @@ pub(crate) fn git_command() -> Command {
     command
 }
 
-/// 跑一条已经配好的 Git 命令，并占用一个全局并发名额。
+/// 跑一条已经配好的本地 Git 命令，占用一个全局并发名额，带本地超时。
 pub(crate) fn git_output(command: &mut Command) -> Result<Output, String> {
-    let _slot = GitSlot::acquire();
-    command.output().map_err(command_error)
+    run_git(command, None, LOCAL_TIMEOUT, None)
 }
 
 /// 同 `git_output`，但把 `input` 写进标准输入。调用前不用自己设置 stdin。
 pub(crate) fn git_output_stdin(command: &mut Command, input: &[u8]) -> Result<Output, String> {
-    use std::io::Write;
-    command.stdin(Stdio::piped());
+    run_git(command, Some(input), LOCAL_TIMEOUT, None)
+}
+
+/// 运行 Git 子进程：占用并发名额，超时或取消时终止进程。
+///
+/// 标准输出和标准错误在单独线程里读取，避免输出过多时管道写满导致死锁。
+/// 终止进程后不等待读取线程：Git 可能留下仍持有管道的子进程（如 ssh），
+/// 等待会把调用方一起卡住；这些线程在管道关闭后自行结束。
+fn run_git(
+    command: &mut Command,
+    input: Option<&[u8]>,
+    timeout: Duration,
+    cancel: Option<&CancelToken>,
+) -> Result<Output, String> {
     let _slot = GitSlot::acquire();
-    let mut child = command.spawn().map_err(command_error)?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(input).map_err(command_error)?;
-        // 关掉管道，Git 才能读到 EOF。
-        drop(stdin);
+    // 排队等名额期间可能已被取消，这时不再启动进程。
+    if cancel.is_some_and(CancelToken::is_cancelled) {
+        return Err(CANCELLED_MESSAGE.to_string());
     }
-    child.wait_with_output().map_err(command_error)
+
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    if input.is_some() {
+        command.stdin(Stdio::piped());
+    }
+    let mut child = command.spawn().map_err(command_error)?;
+
+    let writer = match (input, child.stdin.take()) {
+        (Some(data), Some(mut stdin)) => {
+            let data = data.to_vec();
+            // 写完后 stdin 随线程结束被关闭，Git 才能读到 EOF。
+            Some(thread::spawn(move || stdin.write_all(&data)))
+        }
+        _ => None,
+    };
+    let stdout_reader = spawn_pipe_reader(child.stdout.take());
+    let stderr_reader = spawn_pipe_reader(child.stderr.take());
+
+    let deadline = Instant::now() + timeout;
+    // 轮询间隔从 1 毫秒逐步放大到 20 毫秒：短命令几乎没有额外延迟，长命令也不空转。
+    let mut pause = Duration::from_millis(1);
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(err) => {
+                kill_child(&mut child);
+                return Err(command_error(err));
+            }
+        }
+        if cancel.is_some_and(CancelToken::is_cancelled) {
+            kill_child(&mut child);
+            return Err(CANCELLED_MESSAGE.to_string());
+        }
+        if Instant::now() >= deadline {
+            kill_child(&mut child);
+            return Err(format!("超时（{} 秒），已终止", timeout.as_secs()));
+        }
+        thread::sleep(pause);
+        pause = (pause * 2).min(Duration::from_millis(20));
+    };
+
+    if let Some(writer) = writer {
+        // Git 提前退出时写入会因管道关闭而失败，此时以 Git 的退出结果为准。
+        let _ = writer.join();
+    }
+    let stdout = stdout_reader.join().unwrap_or_default();
+    let stderr = stderr_reader.join().unwrap_or_default();
+    Ok(Output {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn spawn_pipe_reader<R>(pipe: Option<R>) -> thread::JoinHandle<Vec<u8>>
+where
+    R: Read + Send + 'static,
+{
+    thread::spawn(move || {
+        let mut buffer = Vec::new();
+        if let Some(mut pipe) = pipe {
+            let _ = pipe.read_to_end(&mut buffer);
+        }
+        buffer
+    })
+}
+
+fn kill_child(child: &mut std::process::Child) {
+    let _ = child.kill();
+    // 回收进程句柄，避免僵尸进程。
+    let _ = child.wait();
 }
 
 struct GitSlot;
@@ -375,21 +527,46 @@ fn run_status(path: &Path) -> Result<ParsedStatus, String> {
     parse_porcelain_v2(&text)
 }
 
-fn run_fetch(path: &Path) -> Result<(), String> {
+fn run_fetch(path: &Path, cancel: &CancelToken) -> Result<(), String> {
+    if cancel.is_cancelled() {
+        return Err(CANCELLED_MESSAGE.to_string());
+    }
     if !path.exists() {
         return Err("路径不存在".into());
     }
     // `--all` 更新每个远端的引用；不带 merge，本地分支保持原样。
-    let output = git_output(
-        git_command()
-            .arg("-C")
-            .arg(path)
-            .args(["fetch", "--all", "--prune", "--quiet"]),
-    )?;
+    let mut command = git_command();
+    command
+        .arg("-C")
+        .arg(path)
+        .args(["fetch", "--all", "--prune", "--quiet"]);
+    if !has_custom_ssh(path) {
+        command.env("GIT_SSH_COMMAND", BATCH_SSH_COMMAND);
+    }
+    let output = run_git(&mut command, None, NETWORK_TIMEOUT, Some(cancel))?;
     if output.status.success() {
         Ok(())
     } else {
         Err(stderr_brief(&output))
+    }
+}
+
+/// 用户是否自己指定了 SSH 程序（如 plink、Windows 自带 OpenSSH）。
+/// 指定了就不覆盖，否则会破坏用户已有的密钥和代理配置。
+/// `GIT_SSH_COMMAND` 环境变量优先级高于 `core.sshCommand`，所以两处都要检查。
+fn has_custom_ssh(path: &Path) -> bool {
+    if std::env::var_os("GIT_SSH_COMMAND").is_some() || std::env::var_os("GIT_SSH").is_some() {
+        return true;
+    }
+    let mut command = git_command();
+    command
+        .arg("-C")
+        .arg(path)
+        .args(["config", "--get", "core.sshCommand"]);
+    match git_output(&mut command) {
+        Ok(output) => output.status.success() && !output.stdout.trim_ascii().is_empty(),
+        // 读不到配置时按「未自定义」处理：BatchMode 只会让交互提示失败，不会改变认证方式。
+        Err(_) => false,
     }
 }
 
@@ -638,6 +815,115 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         assert_eq!(dirty.changed_files, 2);
         assert_eq!(dirty.workspace_label, "2 个文件已修改");
         assert_eq!(dirty.tone, Tone::Dirty);
+    }
+
+    /// 一个会运行几秒的子进程，用来验证超时和取消。
+    fn slow_command() -> Command {
+        let mut command;
+        if cfg!(windows) {
+            command = Command::new("ping");
+            command.args(["-n", "6", "127.0.0.1"]);
+        } else {
+            command = Command::new("sleep");
+            command.arg("5");
+        }
+        hide_console_window(&mut command);
+        command.stdin(Stdio::null());
+        command
+    }
+
+    #[test]
+    fn run_git_kills_process_on_timeout() {
+        let started = Instant::now();
+        let result = run_git(&mut slow_command(), None, Duration::from_millis(300), None);
+        let message = result.expect_err("应当超时");
+        assert!(message.contains("超时"), "{message}");
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "超时后没有及时返回"
+        );
+    }
+
+    #[test]
+    fn run_git_stops_when_cancelled() {
+        let cancel = CancelToken::new();
+        let trigger = cancel.clone();
+        let canceller = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+            trigger.cancel();
+        });
+        let started = Instant::now();
+        let result = run_git(
+            &mut slow_command(),
+            None,
+            Duration::from_secs(30),
+            Some(&cancel),
+        );
+        canceller.join().unwrap();
+        assert_eq!(result.unwrap_err(), CANCELLED_MESSAGE);
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "取消后没有及时返回"
+        );
+    }
+
+    #[test]
+    fn cancelled_fetch_still_reads_local_status_and_reports_each_repo() {
+        if !git_ok() {
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        git(dir.path(), &["init", "-b", "main"]);
+        fs::write(dir.path().join("a.txt"), "v1\n").unwrap();
+
+        let cancel = CancelToken::new();
+        cancel.cancel();
+        let seen = Mutex::new(Vec::new());
+        let path = dir.path().to_string_lossy().into_owned();
+        let report = fetch_all_with(std::slice::from_ref(&path), &cancel, |progress| {
+            seen.lock().unwrap().push(progress.clone());
+        });
+        assert!(report.cancelled);
+        assert_eq!(report.failures.len(), 1);
+        assert_eq!(report.failures[0].message, CANCELLED_MESSAGE);
+        assert!(report.items[0].ok, "取消 fetch 后仍应读到本地状态");
+        assert_eq!(report.items[0].changed_files, 1);
+        let seen = seen.into_inner().unwrap();
+        assert_eq!(seen.len(), 1, "每个仓库应推送一次进度");
+        assert_eq!(seen[0].fetch_error.as_deref(), Some(CANCELLED_MESSAGE));
+    }
+
+    #[test]
+    fn status_streams_one_item_per_repo() {
+        if !git_ok() {
+            return;
+        }
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        git(first.path(), &["init", "-b", "main"]);
+        git(second.path(), &["init", "-b", "main"]);
+        let paths = vec![
+            first.path().to_string_lossy().into_owned(),
+            second.path().to_string_lossy().into_owned(),
+        ];
+        let seen = Mutex::new(Vec::new());
+        let report = query_statuses_with(&paths, |item| {
+            seen.lock().unwrap().push(item.path.clone());
+        });
+        let mut seen = seen.into_inner().unwrap();
+        seen.sort();
+        let mut expected = paths.clone();
+        expected.sort();
+        assert_eq!(seen, expected);
+        assert_eq!(
+            report
+                .items
+                .iter()
+                .map(|item| item.path.clone())
+                .collect::<Vec<_>>(),
+            paths,
+            "汇总结果应保持原顺序"
+        );
     }
 
     #[test]

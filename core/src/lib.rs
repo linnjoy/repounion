@@ -14,8 +14,9 @@ mod store;
 
 pub use changes::{list_changes, load_file_diff, ChangeList, FileChange, FileDiff, HunkSpan};
 pub use gitinfo::{
-    fetch_all, query_statuses, FetchFailure, FetchReport, RepoStatus, StatusReport, Tone,
-    GIT_CONCURRENCY,
+    fetch_all, fetch_all_with, query_statuses, query_statuses_with, CancelToken, FetchFailure,
+    FetchProgress, FetchReport, RepoStatus, StatusReport, Tone, CANCELLED_MESSAGE, GIT_CONCURRENCY,
+    LOCAL_TIMEOUT, NETWORK_TIMEOUT,
 };
 pub use model::{AppState, SourceDirectory, Workspace};
 pub use paths::{

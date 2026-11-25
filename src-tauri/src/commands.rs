@@ -3,19 +3,20 @@
 use std::path::Path;
 
 use serde::Serialize;
+use tauri::ipc::Channel;
 use tauri::State;
 
 use repounion_core::{
     absorb_discovered, add_standalone, commit_folder, create_workspace as create_ws,
-    delete_workspace as delete_ws, fetch_all as fetch_repos, list_changes,
-    load_file_diff as read_file_diff, load_state, normalize_dir, normalize_repo, query_statuses,
-    remove_repo as remove_from_ws, rename_workspace as rename_ws, save_state, scan_folder,
-    scan_git_repos, set_active, set_auto_scan, workspace_mut, AppState, ChangeList, FetchReport,
-    FileDiff, ScanReport, StatusReport, Workspace,
+    delete_workspace as delete_ws, fetch_all_with as fetch_repos, list_changes,
+    load_file_diff as read_file_diff, load_state, normalize_dir, normalize_repo,
+    query_statuses_with, remove_repo as remove_from_ws, rename_workspace as rename_ws, save_state,
+    scan_folder, scan_git_repos, set_active, set_auto_scan, workspace_mut, AppState, ChangeList,
+    FetchProgress, FetchReport, FileDiff, RepoStatus, ScanReport, StatusReport, Workspace,
 };
 
 use crate::open_external::{open_folder, open_terminal, open_vscode};
-use crate::ConfigLock;
+use crate::{ConfigLock, FetchControl};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -263,28 +264,51 @@ pub fn remove_repo(
     })
 }
 
-/// 只读本地状态，不 fetch。
+/// 只读本地状态，不 fetch。每完成一个仓库就通过 `on_item` 推送一行，最后返回完整结果。
 #[tauri::command]
 pub async fn refresh_status(
     config: State<'_, ConfigLock>,
     workspace_id: String,
+    on_item: Channel<RepoStatus>,
 ) -> Result<StatusReport, String> {
     let paths = paths_of(&config, &workspace_id)?;
-    tauri::async_runtime::spawn_blocking(move || query_statuses(&paths))
-        .await
-        .map_err(|err| format!("状态查询任务失败：{err}"))
+    tauri::async_runtime::spawn_blocking(move || {
+        query_statuses_with(&paths, |item| {
+            // 前端窗口已关闭时发送会失败，忽略即可，最终结果仍会返回。
+            let _ = on_item.send(item.clone());
+        })
+    })
+    .await
+    .map_err(|err| format!("状态查询任务失败：{err}"))
 }
 
 /// 对每个仓库 `git fetch`，然后重新读取状态。不合并本地分支。
+/// 同一时间只允许一批 Fetch；`cancel_fetch` 可以取消当前批次。
 #[tauri::command]
 pub async fn fetch_all(
     config: State<'_, ConfigLock>,
+    control: State<'_, FetchControl>,
     workspace_id: String,
+    on_item: Channel<FetchProgress>,
 ) -> Result<FetchReport, String> {
     let paths = paths_of(&config, &workspace_id)?;
-    tauri::async_runtime::spawn_blocking(move || fetch_repos(&paths))
-        .await
-        .map_err(|err| format!("Fetch 任务失败：{err}"))
+    let cancel = control.begin()?;
+    let worker_cancel = cancel.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        fetch_repos(&paths, &worker_cancel, |progress| {
+            let _ = on_item.send(progress.clone());
+        })
+    })
+    .await
+    .map_err(|err| format!("Fetch 任务失败：{err}"));
+    control.finish();
+    result
+}
+
+/// 取消正在进行的 Fetch。没有进行中的 Fetch 时什么也不做。
+#[tauri::command]
+pub fn cancel_fetch(control: State<FetchControl>) {
+    control.cancel();
 }
 
 /// 只读取这一个仓库的改动文件，不预取 diff。

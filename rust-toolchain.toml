@@ -1,0 +1,6 @@
+# 固定 Rust 版本，保证本机和 CI 编译结果一致。
+# 升级时同步修改 .github/workflows/windows.yml 中的 toolchain。
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

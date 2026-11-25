@@ -1,12 +1,14 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppState,
   ChangeList,
   CompareMode,
+  FetchProgress,
   FetchReport,
   FileDiff,
   OpenResult,
+  RepoStatus,
   RescanResult,
   ScanReport,
   StatusReport,
@@ -66,12 +68,29 @@ export function removeRepo(workspaceId: string, path: string): Promise<Workspace
   return invoke("remove_repo", { workspaceId, path });
 }
 
-export function refreshStatus(workspaceId: string): Promise<StatusReport> {
-  return invoke("refresh_status", { workspaceId });
+/** 读取本地状态。每完成一个仓库回调一次 `onItem`，最后返回完整结果。 */
+export function refreshStatus(
+  workspaceId: string,
+  onItem: (item: RepoStatus) => void,
+): Promise<StatusReport> {
+  const channel = new Channel<RepoStatus>();
+  channel.onmessage = onItem;
+  return invoke("refresh_status", { workspaceId, onItem: channel });
 }
 
-export function fetchAll(workspaceId: string): Promise<FetchReport> {
-  return invoke("fetch_all", { workspaceId });
+/** Fetch 全部仓库。每完成一个仓库回调一次 `onItem`，最后返回完整结果。 */
+export function fetchAll(
+  workspaceId: string,
+  onItem: (progress: FetchProgress) => void,
+): Promise<FetchReport> {
+  const channel = new Channel<FetchProgress>();
+  channel.onmessage = onItem;
+  return invoke("fetch_all", { workspaceId, onItem: channel });
+}
+
+/** 取消正在进行的 Fetch：运行中的 Git 进程被终止，未开始的仓库跳过。 */
+export function cancelFetch(): Promise<void> {
+  return invoke("cancel_fetch");
 }
 
 export function listRepoChanges(path: string, mode: CompareMode): Promise<ChangeList> {
