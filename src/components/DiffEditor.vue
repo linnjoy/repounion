@@ -12,7 +12,8 @@ import { java } from "@codemirror/lang-java";
 import { go } from "@codemirror/lang-go";
 import { sql } from "@codemirror/lang-sql";
 import { php } from "@codemirror/lang-php";
-import { defaultHighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 import { dockerFile } from "@codemirror/legacy-modes/mode/dockerfile";
 import { powerShell } from "@codemirror/legacy-modes/mode/powershell";
 import { properties } from "@codemirror/legacy-modes/mode/properties";
@@ -125,23 +126,36 @@ function languageOf(filename: string): Extension {
   }
 }
 
+/**
+ * 语法高亮颜色全部取自主题 CSS 变量（styles.css 里的 --syn-*），
+ * 切换曜石 / 雪花石 / 遥测主题时无需重建编辑器。
+ */
+const themedHighlight = HighlightStyle.define([
+  { tag: [tags.keyword, tags.controlKeyword, tags.operatorKeyword, tags.modifier], color: "var(--syn-keyword)" },
+  { tag: [tags.string, tags.special(tags.string), tags.regexp, tags.character], color: "var(--syn-string)" },
+  { tag: [tags.number, tags.bool, tags.null, tags.atom], color: "var(--syn-number)" },
+  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: "var(--syn-comment)", fontStyle: "italic" },
+  { tag: [tags.typeName, tags.className, tags.namespace, tags.tagName], color: "var(--syn-type)" },
+  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.macroName], color: "var(--syn-function)" },
+  { tag: [tags.propertyName, tags.attributeName, tags.labelName], color: "var(--syn-property)" },
+  { tag: [tags.meta, tags.processingInstruction, tags.annotation, tags.punctuation], color: "var(--syn-meta)" },
+  { tag: tags.heading, fontWeight: "600", color: "var(--syn-function)" },
+  { tag: tags.link, textDecoration: "underline", color: "var(--syn-type)" },
+  { tag: tags.invalid, color: "var(--rose)" },
+]);
+
 function editorExtensions(language: Compartment, filename: string): Extension[] {
   return [
     lineNumbers(),
     EditorState.readOnly.of(true),
     EditorState.tabSize.of(4),
     EditorView.editable.of(false),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    syntaxHighlighting(themedHighlight),
     language.of(languageOf(filename)),
+    // 背景、行号栏、增删行底色由 styles.css 的「CodeMirror 主题适配」统一覆盖。
     EditorView.theme({
       "&": { fontSize: "12.5px" },
-      ".cm-scroller": { fontFamily: "var(--mono)" },
-      ".cm-gutters": {
-        backgroundColor: "#f7f8fa",
-        color: "#98a2b3",
-        borderRight: "1px solid #e4e7ec",
-      },
-      ".cm-activeLineGutter": { backgroundColor: "transparent" },
+      ".cm-scroller": { fontFamily: "var(--mono)", lineHeight: "1.55" },
     }),
   ];
 }

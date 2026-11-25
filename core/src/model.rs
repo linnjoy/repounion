@@ -5,8 +5,23 @@
 
 use serde::{Deserialize, Serialize};
 
+/// 当前配置格式版本。
+/// - 1：初版。
+/// - 2：工作区增加 `protectedBranches`。读取 1 版时自动补默认值，保存时写为 2。
+pub const CONFIG_VERSION: u32 = 2;
+
+/// 缺少 version 字段的文件视为初版。
 fn default_version() -> u32 {
     1
+}
+
+/// 新建工作区和从 1 版迁移时使用的默认保护分支。
+pub fn default_protected_branches() -> Vec<String> {
+    vec![
+        "main".to_string(),
+        "master".to_string(),
+        "release/*".to_string(),
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,7 +38,7 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: CONFIG_VERSION,
             active_workspace_id: None,
             workspaces: Vec::new(),
         }
@@ -39,6 +54,9 @@ pub struct Workspace {
     pub sources: Vec<SourceDirectory>,
     #[serde(default)]
     pub standalone_repos: Vec<String>,
+    /// 保护分支规则，`*` 匹配任意字符。在这些分支上有改动或未推送提交时警告。
+    #[serde(default = "default_protected_branches")]
+    pub protected_branches: Vec<String>,
 }
 
 impl Workspace {

@@ -28,19 +28,31 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="overlay" @mousedown.self="emit('cancel')">
-    <form class="dialog sm" @submit.prevent="onSubmit">
-      <div class="dialog-h">
-        <h2>{{ title }}</h2>
+  <div class="modal-backdrop" @mousedown.self="emit('cancel')">
+    <form class="modal-dialog sm" role="dialog" aria-modal="true" @submit.prevent="onSubmit">
+      <div class="modal-head">
+        <h3>{{ title }}</h3>
       </div>
-      <div class="dialog-b">
-        <label class="field-label" for="workspace-name">工作区名称</label>
-        <input id="workspace-name" ref="input" v-model="name" type="text" maxlength="80" />
-        <p v-if="error" class="scan-error">{{ error }}</p>
+      <div class="modal-body">
+        <div>
+          <label class="field-label" for="workspace-name">工作区名称</label>
+          <input
+            id="workspace-name"
+            ref="input"
+            v-model="name"
+            class="text-input"
+            type="text"
+            maxlength="80"
+            placeholder="例如：个人项目、公司项目"
+          />
+        </div>
+        <p v-if="error" class="form-error">{{ error }}</p>
       </div>
-      <div class="dialog-f">
-        <button type="button" class="btn" @click="emit('cancel')">取消</button>
-        <button type="submit" class="btn primary" :disabled="pending">{{ confirmText }}</button>
+      <div class="modal-foot">
+        <div class="right">
+          <button type="button" class="btn" @click="emit('cancel')">取消</button>
+          <button type="submit" class="btn btn-primary" :disabled="pending">{{ confirmText }}</button>
+        </div>
       </div>
     </form>
   </div>

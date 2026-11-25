@@ -1,0 +1,3543 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RepoUnion — 界面交互规范原型（纯原生 CSS）</title>
+  <style>
+    /* ========================================================================
+       1. DESIGN TOKENS (100% Pure Native CSS — 直接对应 src/styles.css)
+       ======================================================================== */
+    :root {
+      color-scheme: light;
+      --font-sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+      --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+      --fs-title: 15px;
+      --fs-body: 13px;
+      --fs-sm: 12px;
+      --fs-xs: 11px;
+
+      --radius-xs: 3px;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+
+      --sidebar-width: 216px;
+      --topbar-height: 44px;
+      --filterbar-height: 36px;
+      --row-height: 44px;
+      --group-header-height: 28px;
+
+      --bg-app: #f3f4f6;
+      --bg-sidebar: #eaedf1;
+      --bg-surface: #ffffff;
+      --bg-surface-subtle: #f8f9fb;
+      --bg-input: #ffffff;
+      --bg-hover: #f1f4f9;
+      --bg-selected: #e8f0fe;
+      --bg-overlay: rgba(15, 23, 42, 0.36);
+
+      --border-subtle: #e4e7ec;
+      --border-default: #d0d5dd;
+      --border-strong: #98a2b3;
+      --border-focus: #2563eb;
+
+      --text-primary: #111827;
+      --text-secondary: #4b5563;
+      --text-muted: #6b7280;
+      --text-inverse: #ffffff;
+
+      --accent: #1d4ed8;
+      --accent-hover: #1e40af;
+      --accent-soft: #eff6ff;
+      --accent-border: #bfdbfe;
+      --brand-forge: #ea580c;
+
+      --status-new-fg: #6d28d9;
+      --status-new-bg: #ede9fe;
+      --status-new-border: #c4b5fd;
+      --status-new-bar: #7c3aed;
+      --status-new-row: rgba(124, 58, 237, 0.04);
+
+      --status-danger-fg: #b91c1c;
+      --status-danger-bg: #fee2e2;
+      --status-danger-border: #fca5a5;
+      --status-danger-bar: #dc2626;
+
+      --status-dirty-fg: #b45309;
+      --status-dirty-bg: #fef3c7;
+      --status-dirty-border: #fcd34d;
+      --status-dirty-bar: #d97706;
+
+      --status-sync-fg: #1d4ed8;
+      --status-sync-bg: #dbeafe;
+      --status-sync-border: #93c5fd;
+      --status-sync-bar: #2563eb;
+
+      --status-clean-fg: #047857;
+      --status-clean-bg: #d1fae5;
+      --status-clean-border: #6ee7b7;
+      --status-clean-bar: #10b981;
+
+      --status-neutral-fg: #4b5563;
+      --status-neutral-bg: #f3f4f6;
+      --status-neutral-border: #d1d5db;
+      --status-neutral-bar: #9ca3af;
+
+      --diff-add-bg: #e6ffec;
+      --diff-add-fg: #116329;
+      --diff-del-bg: #ffebe9;
+      --diff-del-fg: #a40e26;
+      --diff-hunk-bg: #edf4ff;
+      --diff-hunk-fg: #1d4ed8;
+      --diff-gutter-bg: #f6f8fa;
+      --diff-gutter-fg: #6b7280;
+
+      --shadow-popover: 0 6px 20px rgba(15, 23, 42, 0.12), 0 1px 3px rgba(15, 23, 42, 0.08);
+      --shadow-modal: 0 18px 48px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.06);
+      --ease: cubic-bezier(0.2, 0, 0, 1);
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg-app: #0d0f12;
+      --bg-sidebar: #12151a;
+      --bg-surface: #161a21;
+      --bg-surface-subtle: #1c212b;
+      --bg-input: #101318;
+      --bg-hover: #1f2531;
+      --bg-selected: #1b283d;
+      --bg-overlay: rgba(0, 0, 0, 0.62);
+
+      --border-subtle: #242a35;
+      --border-default: #303846;
+      --border-strong: #475266;
+      --border-focus: #60a5fa;
+
+      --text-primary: #eef2f6;
+      --text-secondary: #9aa5b5;
+      --text-muted: #6c788a;
+      --text-inverse: #0d0f12;
+
+      --accent: #3b82f6;
+      --accent-hover: #60a5fa;
+      --accent-soft: rgba(59, 130, 246, 0.15);
+      --accent-border: rgba(96, 165, 250, 0.35);
+      --brand-forge: #f97316;
+
+      --status-new-fg: #c4b5fd;
+      --status-new-bg: rgba(139, 92, 246, 0.18);
+      --status-new-border: rgba(167, 139, 250, 0.42);
+      --status-new-bar: #8b5cf6;
+      --status-new-row: rgba(139, 92, 246, 0.07);
+
+      --status-danger-fg: #f87171;
+      --status-danger-bg: rgba(239, 68, 68, 0.15);
+      --status-danger-border: rgba(248, 113, 113, 0.38);
+      --status-danger-bar: #ef4444;
+
+      --status-dirty-fg: #fbbf24;
+      --status-dirty-bg: rgba(245, 158, 11, 0.15);
+      --status-dirty-border: rgba(251, 191, 36, 0.35);
+      --status-dirty-bar: #f59e0b;
+
+      --status-sync-fg: #60a5fa;
+      --status-sync-bg: rgba(59, 130, 246, 0.16);
+      --status-sync-border: rgba(96, 165, 250, 0.36);
+      --status-sync-bar: #3b82f6;
+
+      --status-clean-fg: #34d399;
+      --status-clean-bg: rgba(16, 185, 129, 0.14);
+      --status-clean-border: rgba(52, 211, 153, 0.32);
+      --status-clean-bar: #10b981;
+
+      --status-neutral-fg: #9ca3af;
+      --status-neutral-bg: rgba(156, 163, 175, 0.13);
+      --status-neutral-border: rgba(156, 163, 175, 0.28);
+      --status-neutral-bar: #6b7280;
+
+      --diff-add-bg: rgba(46, 160, 67, 0.16);
+      --diff-add-fg: #7ee787;
+      --diff-del-bg: rgba(248, 81, 73, 0.16);
+      --diff-del-fg: #ffa198;
+      --diff-hunk-bg: rgba(56, 139, 253, 0.14);
+      --diff-hunk-fg: #79c0ff;
+      --diff-gutter-bg: #12151b;
+      --diff-gutter-fg: #5e6a7c;
+
+      --shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.06);
+      --shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.68), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    /* ========================================================================
+       2. BASE RESET & PROTOTYPE STAGE CHROME
+       ======================================================================== */
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      font-family: var(--font-sans);
+      font-size: var(--fs-body);
+      color: var(--text-primary);
+      background: var(--bg-app);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button, input, select {
+      font-family: inherit;
+      font-size: inherit;
+      color: inherit;
+    }
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .hidden { display: none !important; }
+
+    /* Demo Control Ribbon (top 34px for reviewer to simulate window focus, empty state, 1100px width) */
+    .demo-ribbon {
+      height: 34px;
+      padding: 0 12px;
+      background: var(--bg-sidebar);
+      border-bottom: 1px solid var(--border-default);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: var(--fs-xs);
+      color: var(--text-secondary);
+      user-select: none;
+    }
+    .demo-ribbon-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .demo-chip {
+      height: 22px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 100ms var(--ease), border-color 100ms var(--ease);
+    }
+    .demo-chip:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .demo-chip.active {
+      background: var(--accent-soft);
+      border-color: var(--accent-border);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Viewport Frame (supports simulating 1100px half-screen vs full width) */
+    .stage-wrapper {
+      height: calc(100vh - 34px);
+      display: flex;
+      justify-content: center;
+      background: var(--bg-app);
+      overflow: hidden;
+    }
+    .app-shell {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      background: var(--bg-surface);
+      transition: max-width 180ms var(--ease);
+      overflow: hidden;
+      position: relative;
+    }
+    .app-shell.sim-1100 {
+      max-width: 1100px;
+      border-left: 1px solid var(--border-default);
+      border-right: 1px solid var(--border-default);
+      box-shadow: var(--shadow-popover);
+    }
+
+    /* ========================================================================
+       3. COMMON BUTTONS, INPUTS, BADGES
+       ======================================================================== */
+    .btn {
+      height: 28px;
+      padding: 0 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-size: var(--fs-sm);
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 100ms var(--ease), border-color 100ms var(--ease);
+    }
+    .btn:hover:not(:disabled) { background: var(--bg-hover); }
+    .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #ffffff;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
+    }
+    .btn-ghost {
+      border-color: transparent;
+      background: transparent;
+      color: var(--text-secondary);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .btn-icon {
+      width: 26px;
+      height: 26px;
+      padding: 0;
+      justify-content: center;
+    }
+    .btn-sm {
+      height: 24px;
+      padding: 0 8px;
+      font-size: var(--fs-xs);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: var(--radius-sm);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      border: 1px solid transparent;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .badge-new { background: var(--status-new-bg); color: var(--status-new-fg); border-color: var(--status-new-border); }
+    .badge-danger { background: var(--status-danger-bg); color: var(--status-danger-fg); border-color: var(--status-danger-border); }
+    .badge-dirty { background: var(--status-dirty-bg); color: var(--status-dirty-fg); border-color: var(--status-dirty-border); }
+    .badge-sync { background: var(--status-sync-bg); color: var(--status-sync-fg); border-color: var(--status-sync-border); }
+    .badge-clean { background: var(--status-clean-bg); color: var(--status-clean-fg); border-color: var(--status-clean-border); }
+    .badge-neutral { background: var(--status-neutral-bg); color: var(--status-neutral-fg); border-color: var(--status-neutral-border); }
+    .badge-dashed { border-style: dashed; }
+
+    .kbd {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface-subtle);
+      color: var(--text-muted);
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 900ms linear infinite; }
+
+    @keyframes pulseBar {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    .pulse-bar { animation: pulseBar 1.1s ease-in-out infinite; }
+
+    @keyframes flashDone {
+      0% { background-color: var(--accent-soft); }
+      100% { background-color: transparent; }
+    }
+    .flash-done { animation: flashDone 420ms ease-out; }
+
+    /* ========================================================================
+       4. LEFT SIDEBAR
+       ======================================================================== */
+    .sidebar {
+      width: var(--sidebar-width);
+      flex-shrink: 0;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      user-select: none;
+    }
+    .app-shell.sim-1100 .sidebar { width: 196px; }
+
+    .sidebar-brand {
+      height: var(--topbar-height);
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+    }
+
+    .sidebar-section {
+      padding: 10px 8px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    .sidebar-heading {
+      padding: 0 8px 6px;
+      font-size: var(--fs-xs);
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .ws-item {
+      height: 32px;
+      padding: 0 8px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+      transition: background 100ms var(--ease);
+    }
+    .ws-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .ws-item.active {
+      background: var(--bg-selected);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .ws-item-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+    .ws-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ws-count {
+      font-size: var(--fs-xs);
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .ws-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+
+    .sidebar-footer {
+      padding: 10px 10px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .theme-seg {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      background: var(--bg-app);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 2px;
+      gap: 2px;
+    }
+    .theme-seg button {
+      height: 22px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+    .theme-seg button.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
+    /* ========================================================================
+       5. MAIN WORKSPACE COLUMN
+       ======================================================================== */
+    .main-col {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+      overflow: hidden;
+    }
+
+    /* Top Toolbar */
+    .topbar {
+      height: var(--topbar-height);
+      padding: 0 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-app);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+    .ws-title {
+      font-size: var(--fs-title);
+      font-weight: 600;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .summary-stats {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--fs-xs);
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .focus-refresh-pill {
+      font-size: var(--fs-xs);
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    .topbar-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    /* Mode Segmented Switcher (全部哨兵 / 收工检查) */
+    .mode-seg {
+      display: inline-flex;
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: 2px;
+      gap: 2px;
+    }
+    .mode-seg button {
+      height: 24px;
+      padding: 0 9px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .mode-seg button.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-weight: 600;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Non-blocking Fetch Failure Summary Banner */
+    .fetch-banner {
+      background: var(--status-danger-bg);
+      border-bottom: 1px solid var(--status-danger-border);
+      color: var(--status-danger-fg);
+      font-size: var(--fs-xs);
+      flex-shrink: 0;
+    }
+    .fetch-banner-bar {
+      height: 32px;
+      padding: 0 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .fetch-banner-details {
+      padding: 6px 14px 10px;
+      border-top: 1px dashed var(--status-danger-border);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      background: var(--bg-surface);
+      color: var(--text-primary);
+    }
+    .fetch-err-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: var(--fs-xs);
+    }
+
+    /* Filter Bar */
+    .filterbar {
+      min-height: var(--filterbar-height);
+      padding: 5px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    .filter-chips {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .fchip {
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: var(--fs-xs);
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .fchip:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .fchip.active {
+      background: var(--accent-soft);
+      border-color: var(--accent-border);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .fchip-count {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      opacity: 0.85;
+    }
+
+    .filter-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-box input {
+      height: 26px;
+      width: 196px;
+      padding: 0 24px 0 26px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-default);
+      background: var(--bg-input);
+      font-size: var(--fs-xs);
+      outline: none;
+    }
+    .search-box input:focus { border-color: var(--border-focus); }
+    .search-box svg {
+      position: absolute;
+      left: 8px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* Bulk Selection Action Strip */
+    .bulk-bar {
+      height: 36px;
+      padding: 0 14px;
+      background: var(--accent-soft);
+      border-bottom: 1px solid var(--accent-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-shrink: 0;
+      font-size: var(--fs-sm);
+    }
+
+    /* ========================================================================
+       6. ONE-LEVEL GROUPED REPO LIST (4.2)
+       ======================================================================== */
+    .list-viewport {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .group-header {
+      height: var(--group-header-height);
+      padding: 0 14px;
+      background: var(--bg-surface-subtle);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: var(--fs-xs);
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 4;
+    }
+    .group-header:hover { background: var(--bg-hover); }
+    .group-header-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .group-path {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Single-level Repo Row */
+    .repo-row {
+      position: relative;
+      height: var(--row-height);
+      padding: 0 10px 0 0;
+      border-bottom: 1px solid var(--border-subtle);
+      display: grid;
+      grid-template-columns: 3px 30px minmax(180px, 1.35fr) minmax(145px, 1fr) 128px minmax(185px, 1.3fr) 62px 58px;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      background: var(--bg-surface);
+      transition: background 100ms var(--ease);
+    }
+    .repo-row:hover { background: var(--bg-hover); }
+    .repo-row.selected { background: var(--bg-selected); }
+    .repo-row.is-new { background: var(--status-new-row); }
+    .repo-row.is-new:hover { background: var(--bg-hover); }
+    .repo-row.is-refreshing { opacity: 0.56; }
+
+    /* Adaptive column contraction when 1100px or when detail panel is open */
+    .app-shell.sim-1100 .repo-row .col-path { display: none; }
+    .app-shell.detail-open .repo-row {
+      grid-template-columns: 3px 28px minmax(135px, 1.3fr) minmax(115px, 1fr) 110px 32px;
+    }
+    .app-shell.detail-open .repo-row .col-remote,
+    .app-shell.detail-open .repo-row .col-time,
+    .app-shell.detail-open .repo-row .col-path,
+    .app-shell.detail-open .repo-row .btn-mark-seen-inline {
+      display: none;
+    }
+
+    .row-bar {
+      width: 3px;
+      height: 100%;
+    }
+    .row-bar.dashed {
+      background: repeating-linear-gradient(
+        to bottom,
+        var(--status-danger-bar) 0px,
+        var(--status-danger-bar) 4px,
+        transparent 4px,
+        transparent 7px
+      ) !important;
+    }
+
+    .col-check {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .col-check input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .col-name {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1px;
+    }
+    .name-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .repo-title {
+      font-weight: 600;
+      font-size: var(--fs-body);
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .col-path {
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      color: var(--text-muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .col-branch {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .branch-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      padding: 2px 6px;
+      border-radius: var(--radius-sm);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-secondary);
+      background: var(--bg-surface-subtle);
+      border: 1px solid var(--border-subtle);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .branch-pill.protected-warn {
+      background: var(--status-danger-bg);
+      color: var(--status-danger-fg);
+      border-color: var(--status-danger-border);
+      font-weight: 600;
+    }
+    .branch-pill.detached {
+      border-style: dashed;
+      color: var(--status-neutral-fg);
+    }
+
+    .col-worktree-status,
+    .col-remote {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: nowrap;
+      overflow: hidden;
+    }
+    .col-time {
+      font-size: var(--fs-xs);
+      color: var(--text-muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .col-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 2px;
+    }
+    .btn-mark-seen-inline {
+      opacity: 0;
+      transition: opacity 100ms var(--ease);
+    }
+    .repo-row:hover .btn-mark-seen-inline { opacity: 1; }
+
+    /* Context popover menu for "⋯" */
+    .row-menu-popover {
+      position: fixed;
+      z-index: 60;
+      width: 196px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-popover);
+      padding: 4px;
+    }
+    .row-menu-item {
+      width: 100%;
+      height: 28px;
+      padding: 0 8px;
+      border: none;
+      background: transparent;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: var(--fs-sm);
+      color: var(--text-primary);
+      cursor: pointer;
+      text-align: left;
+    }
+    .row-menu-item:hover { background: var(--bg-hover); }
+    .row-menu-item.danger { color: var(--status-danger-fg); }
+    .row-menu-sep {
+      height: 1px;
+      background: var(--border-subtle);
+      margin: 4px 2px;
+    }
+
+    /* ========================================================================
+       7. WRAP-UP CHECK VIEW (4.3 收工检查视图 - 分支粒度)
+       ======================================================================== */
+    .wrapup-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .wrapup-row {
+      min-height: 42px;
+      padding: 6px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: var(--bg-surface);
+    }
+    .wrapup-row:hover { background: var(--bg-hover); }
+    .wrapup-row-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    /* ========================================================================
+       8. RESIZABLE DETAIL & DIFF PANEL (4.5, 480 ~ 1200px)
+       ======================================================================== */
+    .detail-resizer {
+      width: 4px;
+      cursor: col-resize;
+      background: transparent;
+      border-left: 1px solid var(--border-default);
+      flex-shrink: 0;
+      transition: background 120ms var(--ease);
+    }
+    .detail-resizer:hover,
+    .detail-resizer.dragging {
+      background: var(--accent);
+      border-left-color: var(--accent);
+    }
+
+    .detail-panel {
+      width: 620px;
+      min-width: 480px;
+      max-width: 1200px;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .detail-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-app);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .detail-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .compare-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .compare-tabs {
+      display: inline-flex;
+      background: var(--bg-sidebar);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      padding: 2px;
+      gap: 2px;
+    }
+    .compare-tab {
+      height: 22px;
+      padding: 0 8px;
+      border: none;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .compare-tab.active {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .compare-direction {
+      font-size: 11px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* Adaptive Detail Body: >= 740px side-by-side; < 740px stacked */
+    .detail-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+    }
+    .detail-panel.narrow .detail-body {
+      flex-direction: column;
+    }
+
+    .file-list-pane {
+      width: 230px;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border-subtle);
+      background: var(--bg-surface-subtle);
+      overflow-y: auto;
+    }
+    .detail-panel.narrow .file-list-pane {
+      width: 100%;
+      max-height: 170px;
+      border-right: none;
+      border-bottom: 1px solid var(--border-default);
+    }
+    .file-group-title {
+      padding: 6px 10px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .file-item {
+      height: 28px;
+      padding: 0 10px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: var(--fs-sm);
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+    .file-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .file-item.active {
+      background: var(--bg-selected);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .file-tag {
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .file-path-txt {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+
+    .diff-pane {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+    }
+    .diff-toolbar {
+      height: 34px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-surface-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+      font-size: var(--fs-xs);
+    }
+    .diff-content {
+      flex: 1;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    /* Text Diff Lines */
+    .diff-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .diff-hunk-row {
+      background: var(--diff-hunk-bg);
+      color: var(--diff-hunk-fg);
+    }
+    .diff-hunk-row.active-hunk {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .diff-ln {
+      width: 38px;
+      padding: 0 6px;
+      text-align: right;
+      color: var(--diff-gutter-fg);
+      background: var(--diff-gutter-bg);
+      border-right: 1px solid var(--border-subtle);
+      user-select: none;
+    }
+    .diff-code {
+      padding: 0 10px;
+      white-space: pre;
+    }
+    .diff-line-add { background: var(--diff-add-bg); color: var(--diff-add-fg); }
+    .diff-line-del { background: var(--diff-del-bg); color: var(--diff-del-fg); }
+
+    /* Image Diff */
+    .img-diff-stage {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      height: 100%;
+      align-content: start;
+    }
+    .img-diff-box {
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface-subtle);
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .img-checker {
+      width: 100%;
+      min-height: 160px;
+      border-radius: var(--radius-sm);
+      background-image:
+        linear-gradient(45deg, var(--border-subtle) 25%, transparent 25%),
+        linear-gradient(-45deg, var(--border-subtle) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, var(--border-subtle) 75%),
+        linear-gradient(-45deg, transparent 75%, var(--border-subtle) 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    /* Empty / Special Diff States */
+    .state-card {
+      margin: 28px auto;
+      max-width: 380px;
+      padding: 20px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface-subtle);
+      text-align: center;
+      font-family: var(--font-sans);
+    }
+    .state-card h4 { margin: 8px 0 6px; font-size: 14px; }
+    .state-card p { margin: 0 0 14px; font-size: var(--fs-sm); color: var(--text-secondary); line-height: 1.5; }
+
+    /* ========================================================================
+       9. MODALS (Batch Write 3-State Modal & Workspace Settings)
+       ======================================================================== */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      background: var(--bg-overlay);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-dialog {
+      width: 100%;
+      max-width: 640px;
+      max-height: 82vh;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-modal);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-app);
+    }
+    .modal-head h3 { margin: 0; font-size: var(--fs-title); font-weight: 600; }
+    .modal-body {
+      padding: 14px 16px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .modal-foot {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border-subtle);
+      background: var(--bg-surface-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .batch-item {
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      overflow: hidden;
+    }
+    .batch-item-row {
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: var(--fs-sm);
+    }
+    .batch-commits {
+      padding: 6px 12px 8px 26px;
+      background: var(--bg-surface-subtle);
+      border-top: 1px solid var(--border-subtle);
+      font-size: var(--fs-xs);
+      color: var(--text-secondary);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .progress-track {
+      height: 5px;
+      border-radius: 99px;
+      background: var(--bg-sidebar);
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      transition: width 220ms var(--ease);
+    }
+
+    /* Settings Form Elements */
+    .setting-block {
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 12px;
+      background: var(--bg-surface-subtle);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .setting-label { font-weight: 600; font-size: var(--fs-sm); }
+    .setting-desc { font-size: var(--fs-xs); color: var(--text-muted); margin: 0; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 24px;
+      padding: 0 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border-default);
+      background: var(--bg-surface);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+    }
+    .tag-chip button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    /* First-run Empty State */
+    .first-run-stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: var(--bg-surface);
+    }
+    .first-run-box {
+      max-width: 440px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Toast */
+    .toast-stack {
+      position: fixed;
+      bottom: 14px;
+      right: 14px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+    }
+    .toast-item {
+      padding: 8px 12px;
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-default);
+      box-shadow: var(--shadow-popover);
+      font-size: var(--fs-xs);
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- =========================================================================
+       REVIEWER DEMO RIBBON (仅用于交互规范评审切换各种模拟状态)
+       ========================================================================= -->
+  <div class="demo-ribbon">
+    <div class="demo-ribbon-group">
+      <strong>交互规范验收台</strong>
+      <span>|</span>
+      <button type="button" class="demo-chip" id="btn-sim-1100">半屏 1100px 模拟</button>
+      <button type="button" class="demo-chip" id="btn-sim-focus">模拟窗口获焦自动刷新</button>
+      <button type="button" class="demo-chip" id="btn-sim-empty-ws">预览首次使用空态</button>
+      <button type="button" class="demo-chip" id="btn-sim-fetch-err">显示/隐藏 Fetch 异常条</button>
+    </div>
+    <div class="demo-ribbon-group">
+      <span>快捷键：<span class="kbd">F5</span> 刷新 · <span class="kbd">↑↓</span> 切行/文件 · <span class="kbd">[</span> <span class="kbd">]</span> 切差异 · <span class="kbd">Esc</span> 关闭</span>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MAIN WINDOWS DESKTOP SHELL
+       ========================================================================= -->
+  <div class="stage-wrapper">
+    <div class="app-shell" id="app-shell">
+
+      <!-- LEFT SIDEBAR -->
+      <aside class="sidebar">
+        <div>
+          <div class="sidebar-brand">
+            <div class="brand-left">
+              <!-- Union Node Compact App Icon -->
+              <svg width="20" height="20" viewBox="0 0 128 128" fill="none" aria-hidden="true">
+                <rect x="4" y="4" width="120" height="120" rx="28" fill="#181C24" stroke="#363E4D" stroke-width="4"/>
+                <path d="M36 92V68C36 53 47 46 60 54L64 57M92 36V60C92 75 81 82 68 74L64 71" stroke="#F8FAFC" stroke-width="11" stroke-linecap="round"/>
+                <circle cx="36" cy="92" r="8" fill="#181C24" stroke="#F8FAFC" stroke-width="4.5"/>
+                <circle cx="92" cy="36" r="8" fill="#181C24" stroke="#F8FAFC" stroke-width="4.5"/>
+                <circle cx="64" cy="64" r="19" fill="#12151C" stroke="#475569" stroke-width="3"/>
+                <circle cx="64" cy="64" r="11.5" fill="#F97316"/>
+              </svg>
+              <span>RepoUnion</span>
+            </div>
+            <button type="button" class="btn btn-ghost btn-icon" id="btn-new-ws" title="新建工作区">+</button>
+          </div>
+
+          <div class="sidebar-section">
+            <div class="sidebar-heading">
+              <span>工作区</span>
+              <span class="mono" id="ws-total-count">2</span>
+            </div>
+            <div id="workspace-list"></div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="theme-seg" id="theme-seg">
+            <button type="button" data-theme-set="system">跟随</button>
+            <button type="button" data-theme-set="light" class="active">浅色</button>
+            <button type="button" data-theme-set="dark">深色</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- FIRST-RUN EMPTY STATE (toggled when no workspaces) -->
+      <main class="first-run-stage hidden" id="first-run-view">
+        <div class="first-run-box">
+          <svg width="44" height="44" viewBox="0 0 128 128" fill="none">
+            <rect x="4" y="4" width="120" height="120" rx="28" fill="#181C24" stroke="#363E4D" stroke-width="3"/>
+            <path d="M36 92V68C36 53 47 46 60 54L64 57M92 36V60C92 75 81 82 68 74L64 71" stroke="#F8FAFC" stroke-width="9" stroke-linecap="round"/>
+            <circle cx="64" cy="64" r="18" fill="#12151C" stroke="#475569" stroke-width="3"/>
+            <circle cx="64" cy="64" r="11" fill="#F97316"/>
+          </svg>
+          <h2 style="margin:0; font-size:16px;">开始监控你的本地 Git 仓库</h2>
+          <p style="margin:0; color:var(--text-secondary); font-size:13px; line-height:1.6;">
+            创建工作区并添加本地目录，随时掌握未收尾改动、保护分支风险与 AI agent 带来的仓库变化。
+          </p>
+          <div style="display:flex; gap:8px; margin-top:6px;">
+            <button type="button" class="btn btn-primary" id="btn-first-create">+ 创建工作区并扫描目录</button>
+            <button type="button" class="btn" id="btn-first-restore">恢复演示工作区</button>
+          </div>
+        </div>
+      </main>
+
+      <!-- MAIN CONTENT COLUMN -->
+      <main class="main-col" id="main-col">
+        <!-- Top Toolbar -->
+        <header class="topbar">
+          <div class="topbar-left">
+            <h1 class="ws-title" id="topbar-ws-name">核心工控研发</h1>
+            <div class="summary-stats mono" id="topbar-summary"></div>
+            <span class="focus-refresh-pill" id="focus-refresh-pill" title="窗口重新获得焦点时自动刷新本地状态">
+              <span id="focus-refresh-text">3 秒前刷新</span>
+            </span>
+          </div>
+
+          <div class="topbar-right">
+            <div class="mode-seg" id="main-mode-seg">
+              <button type="button" data-view="sentinel" class="active">全部哨兵</button>
+              <button type="button" data-view="wrapup">收工检查 <span class="mono" id="wrapup-badge-count">0</span></button>
+            </div>
+            <button type="button" class="btn" id="btn-refresh-all" title="刷新状态 (F5)">
+              <svg width="13" height="13" id="topbar-refresh-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/>
+              </svg>
+              <span>刷新状态</span>
+            </button>
+            <button type="button" class="btn" id="btn-fetch-all">Fetch 全部</button>
+            <button type="button" class="btn" id="btn-open-settings" title="工作区设置">⚙ 设置</button>
+          </div>
+        </header>
+
+        <!-- Non-blocking Fetch Error / Timeout Summary Banner -->
+        <div class="fetch-banner" id="fetch-banner">
+          <div class="fetch-banner-bar">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>▲ 上次 Fetch 有 1 个仓库超时，1 个本地读取失败</strong>
+              <button type="button" class="btn btn-sm" id="btn-toggle-fetch-details">展开详情 ▾</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button type="button" class="btn btn-sm" id="btn-retry-failed">重试异常项</button>
+              <button type="button" class="btn btn-ghost btn-icon" id="btn-close-fetch-banner" title="隐藏提示">✕</button>
+            </div>
+          </div>
+          <div class="fetch-banner-details hidden" id="fetch-banner-details">
+            <div class="fetch-err-row">
+              <span><strong class="mono">esp-line-viz</strong> — Fetch 超时 (15s)：连接 gitlab.internal 无响应</span>
+              <button type="button" class="btn btn-sm" data-retry-repo="r-timeout">重试</button>
+            </div>
+            <div class="fetch-err-row">
+              <span><strong class="mono">legacy-opc-bridge</strong> — 读取失败：目录中缺少有效的 .git/HEAD</span>
+              <button type="button" class="btn btn-sm" data-retry-repo="r-failed">重新检测</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- VIEW A: SENTINEL ONE-LEVEL LIST -->
+        <div id="sentinel-container" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+          <!-- Filter Bar -->
+          <div class="filterbar">
+            <div class="filter-chips" id="filter-chips"></div>
+            <div class="filter-right">
+              <button type="button" class="btn btn-sm hidden" id="btn-mark-all-seen"
+                      style="border-color:var(--status-new-border); color:var(--status-new-fg); background:var(--status-new-bg);">
+                ✓ 全部标为已查看 (<span id="new-change-total">0</span>)
+              </button>
+              <div class="search-box">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+                </svg>
+                <input type="text" id="search-input" placeholder="筛选仓库、分支或路径..." />
+              </div>
+            </div>
+          </div>
+
+          <!-- Bulk Action Bar (visible when >=1 repo checked) -->
+          <div class="bulk-bar hidden" id="bulk-bar">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <strong>已选择 <span class="mono" id="bulk-count">0</span> 个仓库</strong>
+              <button type="button" class="btn btn-sm" id="btn-bulk-pull">↓ 快进拉取 (pull --ff-only)</button>
+              <button type="button" class="btn btn-sm btn-primary" id="btn-bulk-push">↑ 推送 (push)</button>
+              <button type="button" class="btn btn-sm" id="btn-bulk-switch">⎇ 切换分支</button>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-bulk-clear">取消选择</button>
+          </div>
+
+          <!-- Grouped 1-Level List -->
+          <div class="list-viewport" id="repo-list-viewport"></div>
+        </div>
+
+        <!-- VIEW B: WRAP-UP CHECK VIEW (4.3 收工检查 - 分支粒度) -->
+        <div id="wrapup-container" class="hidden" style="display:flex; flex-direction:column; flex:1; min-height:0;">
+          <div class="wrapup-header">
+            <div>
+              <strong style="font-size:13.5px;">收工检查 · 分支粒度未收尾清单</strong>
+              <span style="font-size:12px; color:var(--text-secondary); margin-left:8px;" id="wrapup-summary-txt"></span>
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button type="button" class="btn btn-sm" id="btn-wrapup-select-all">勾选全部可推送分支</button>
+              <button type="button" class="btn btn-sm btn-primary" id="btn-wrapup-push">推送选中分支</button>
+            </div>
+          </div>
+          <div class="list-viewport" id="wrapup-list-viewport"></div>
+        </div>
+      </main>
+
+      <!-- RESIZABLE DETAIL & DIFF PANEL (4.5, 480 ~ 1200px) -->
+      <div class="detail-resizer hidden" id="detail-resizer" title="左右拖动调整详情面板宽度 (480px ~ 1200px)"></div>
+      <aside class="detail-panel hidden" id="detail-panel">
+        <!-- Rendered dynamically -->
+      </aside>
+
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 1: BATCH WRITE OPERATION 3-STATE MODAL (4.4 预览 / 执行中 / 执行完毕)
+       ========================================================================= -->
+  <div class="modal-backdrop hidden" id="batch-modal">
+    <div class="modal-dialog">
+      <div class="modal-head">
+        <h3 id="batch-modal-title">批量推送预览</h3>
+        <button type="button" class="btn btn-ghost btn-icon" id="btn-close-batch">✕</button>
+      </div>
+      <div class="modal-body" id="batch-modal-body"></div>
+      <div class="modal-foot" id="batch-modal-foot"></div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 2: WORKSPACE SETTINGS MODAL (4.6 工作区设置)
+       ========================================================================= -->
+  <div class="modal-backdrop hidden" id="settings-modal">
+    <div class="modal-dialog" style="max-width:540px;">
+      <div class="modal-head">
+        <h3>工作区设置 — <span id="settings-ws-name">核心工控研发</span></h3>
+        <button type="button" class="btn btn-ghost btn-icon" id="btn-close-settings">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Protected Branches -->
+        <div class="setting-block">
+          <div class="setting-label">保护分支规则</div>
+          <p class="setting-desc">当仓库在匹配下列规则的分支上产生未提交改动或本地提交时，主列表和收工检查将触发红色警告。</p>
+          <div class="tag-list" id="protected-tags"></div>
+          <div style="display:flex; gap:6px; margin-top:2px;">
+            <input type="text" id="input-add-protected" placeholder="输入分支或通配符，如 prod/*"
+                   style="flex:1; height:26px; padding:0 8px; border:1px solid var(--border-default); border-radius:4px; background:var(--bg-input); font-size:12px;" />
+            <button type="button" class="btn btn-sm" id="btn-add-protected">添加规则</button>
+          </div>
+        </div>
+
+        <!-- Source Directories -->
+        <div class="setting-block">
+          <div class="setting-label">来源目录</div>
+          <p class="setting-desc">主列表按来源目录自动分组，移除绑定不会删除磁盘文件。</p>
+          <div id="settings-dirs-list" style="display:flex; flex-direction:column; gap:5px;"></div>
+        </div>
+
+        <!-- Auto-scan Switch -->
+        <div class="setting-block" style="flex-direction:row; align-items:center; justify-content:space-between;">
+          <div>
+            <div class="setting-label">打开或刷新时自动扫描新增仓库</div>
+            <p class="setting-desc">自动发现上述来源目录中新 clone 的 Git 仓库并加入列表。</p>
+          </div>
+          <input type="checkbox" id="chk-auto-scan" checked style="width:16px; height:16px; accent-color:var(--accent); cursor:pointer;" />
+        </div>
+
+        <!-- Exclude List -->
+        <div class="setting-block">
+          <div class="setting-label">排除清单</div>
+          <p class="setting-desc">扫描来源目录时跳过以下子目录名或特定仓库。</p>
+          <div class="tag-list" id="exclude-tags"></div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span style="font-size:11px; color:var(--text-muted);">设置仅对当前工作区生效</span>
+        <button type="button" class="btn btn-primary" id="btn-save-settings">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Row Context Menu Popover -->
+  <div class="row-menu-popover hidden" id="row-menu"></div>
+
+  <!-- Toast Stack -->
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* =====================================================================
+         MOCK DATASET — 完整覆盖 4.2 节全部 12 种行状态与 4.5 Diff 特殊状态
+         ===================================================================== */
+      const workspaces = [
+        {
+          id: 'ws-industrial',
+          name: '核心工控研发',
+          protectedPatterns: ['main', 'master', 'release/*'],
+          sourceDirs: ['D:\\Projects\\Industrial', 'D:\\Projects\\Tools'],
+          excludePatterns: ['node_modules', 'third_party', 'archive-2022'],
+          autoScan: true
+        },
+        {
+          id: 'ws-personal',
+          name: '个人与实验项目',
+          protectedPatterns: ['main'],
+          sourceDirs: ['D:\\Personal\\Repos'],
+          excludePatterns: ['dist', 'target'],
+          autoScan: true
+        }
+      ];
+
+      // 12 repos covering every single requested state:
+      // 新变化(agent), 冲突, 分叉, 保护分支警告, 有改动, 超前, 落后, 无上游, 游离HEAD, 干净同步, 读取失败, 超时, 以及刷新中/Fetch中动态态
+      const repos = [
+        {
+          id: 'r-agent-dirty',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'repounion',
+          path: 'D:\\Projects\\Industrial\\repounion',
+          branch: 'feat/sentinel-ui',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: true,
+          changeSummary: 'Agent 修改：HEAD 保持 c00e963，工作区新增 3 处改动',
+          modified: 3,
+          untracked: 2,
+          conflicts: 0,
+          ahead: 2,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/feat/sentinel-ui',
+          otherUnpushedBranches: [{ name: 'fix/win-path', ahead: 1, upstream: 'origin/fix/win-path' }],
+          stashCount: 1,
+          stashes: [{ ref: 'stash@{0}', msg: 'WIP: 详情面板宽度拖拽缓存', age: '昨天' }],
+          worktreeTotal: 2,
+          worktreeDirty: 1,
+          lastCommitMins: 8,
+          lastCommitHash: 'c00e963',
+          previewCommits: [
+            { hash: 'c00e963', title: 'feat(ui): 落地一级列表状态色条与图标冗余表达' },
+            { hash: '9a41b2e', title: 'perf(core): 逐行推送仓库刷新事件' }
+          ],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: [
+            {
+              group: '未暂存', tag: 'M', tagStyle: 'dirty', path: 'src/components/WorkspaceBoard.vue', type: 'text',
+              hunks: [
+                {
+                  header: '@@ -28,6 +28,9 @@ <template>',
+                  lines: [
+                    { o: 28, n: 28, t: ' ', c: '  <div class="list-viewport">' },
+                    { o: 29, n: null, t: '-', c: '    <div class="repo-card" v-for="repo in repos">' },
+                    { o: null, n: 29, t: '+', c: '    <div class="repo-row" :class="{ \'is-new\': repo.hasNewChanges }"' },
+                    { o: null, n: 30, t: '+', c: '         v-for="repo in sortedRepos" :key="repo.id">' },
+                    { o: 30, n: 31, t: ' ', c: '      <span class="row-bar" :style="barStyle(repo)" />' }
+                  ]
+                },
+                {
+                  header: '@@ -84,4 +87,7 @@ </script>',
+                  lines: [
+                    { o: 84, n: 87, t: ' ', c: 'const sortedRepos = computed(() => {' },
+                    { o: 85, n: null, t: '-', c: '  return [...repos.value].sort((a, b) => a.name.localeCompare(b.name));' },
+                    { o: null, n: 88, t: '+', c: '  return [...repos.value].sort(compareSentinelPriority);' },
+                    { o: 86, n: 89, t: ' ', c: '});' }
+                  ]
+                }
+              ]
+            },
+            {
+              group: '已暂存', tag: 'A', tagStyle: 'clean', path: 'src-tauri/icons/icon-union.png', type: 'image',
+              oldMeta: { width: 128, height: 128, size: '4.1 KB', color: '#2563eb' },
+              newMeta: { width: 128, height: 128, size: '5.3 KB', color: '#f97316' }
+            },
+            {
+              group: '暂存后又修改', tag: 'MM', tagStyle: 'danger', path: 'src/styles.css', type: 'text',
+              hunks: [
+                {
+                  header: '@@ -12,4 +12,5 @@ :root {',
+                  lines: [
+                    { o: 12, n: 12, t: ' ', c: '  --bg-app: #f3f4f6;' },
+                    { o: 13, n: null, t: '-', c: '  --row-height: 52px;' },
+                    { o: null, n: 13, t: '+', c: '  --row-height: 44px;' }
+                  ]
+                }
+              ]
+            },
+            {
+              group: '未跟踪', tag: '?', tagStyle: 'neutral', path: 'tests/fixtures/large-dump.json', type: 'large',
+              sizeText: '6.4 MB（约 48,200 行）'
+            },
+            {
+              group: '未暂存', tag: 'M', tagStyle: 'dirty', path: 'src-tauri/icons/icon.ico', type: 'binary',
+              oldSize: '12.4 KB', newSize: '14.1 KB'
+            }
+          ]
+        },
+        {
+          id: 'r-protected-warn',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'qt-scada-core',
+          path: 'D:\\Projects\\Industrial\\qt-scada-core',
+          branch: 'main',
+          isDetached: false,
+          isProtected: true,
+          hasNewChanges: true,
+          changeSummary: 'Agent 在保护分支 main 上新增了 2 处改动',
+          modified: 2,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 1,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/main',
+          otherUnpushedBranches: [],
+          stashCount: 2,
+          stashes: [
+            { ref: 'stash@{0}', msg: 'WIP: MySQL 5.7 重连超时参数测试', age: '3 小时前' },
+            { ref: 'stash@{1}', msg: '临时关闭报警弹窗音效', age: '2 天前' }
+          ],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 24,
+          lastCommitHash: '4f81a20',
+          previewCommits: [{ hash: '4f81a20', title: 'hotfix(db): 修复天车调度查询超时' }],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: [
+            {
+              group: '未暂存', tag: 'M', tagStyle: 'dirty', path: 'src/db/mysql_pool.cpp', type: 'text',
+              hunks: [
+                {
+                  header: '@@ -112,4 +112,5 @@ void MysqlPool::init()',
+                  lines: [
+                    { o: 112, n: 112, t: ' ', c: '  db.setHostName(cfg.host);' },
+                    { o: 113, n: null, t: '-', c: '  db.setConnectOptions("MYSQL_OPT_RECONNECT=0");' },
+                    { o: null, n: 113, t: '+', c: '  db.setConnectOptions("MYSQL_OPT_RECONNECT=1;MYSQL_OPT_CONNECT_TIMEOUT=3");' }
+                  ]
+                }
+              ]
+            },
+            {
+              group: '未暂存', tag: '!', tagStyle: 'danger', path: 'config/locked-secret.ini', type: 'error',
+              errorDetail: '无法读取文件：系统返回拒绝访问 (os error 5)'
+            }
+          ]
+        },
+        {
+          id: 'r-conflict',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'plc-simulator-v2',
+          path: 'D:\\Projects\\Industrial\\plc-simulator-v2',
+          branch: 'feat/mirror-sync',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 1,
+          untracked: 0,
+          conflicts: 2,
+          ahead: 1,
+          behind: 2,
+          hasUpstream: true,
+          upstream: 'origin/feat/mirror-sync',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 3,
+          worktreeDirty: 1,
+          lastCommitMins: 75,
+          lastCommitHash: 'e21f7b4',
+          previewCommits: [],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: [
+            {
+              group: '冲突', tag: 'U', tagStyle: 'danger', path: 'src/sim/plc_instance.cpp', type: 'text',
+              hunks: [
+                {
+                  header: '@@ -40,6 +40,9 @@ void PlcInstance::tick()',
+                  lines: [
+                    { o: 40, n: 40, t: ' ', c: '  const auto now = clock_.now();' },
+                    { o: null, n: 41, t: '+', c: '<<<<<<< HEAD' },
+                    { o: null, n: 42, t: '+', c: '  syncMirrorThreadSafe(now);' },
+                    { o: null, n: 43, t: '+', c: '=======' },
+                    { o: null, n: 44, t: '+', c: '  dispatchCycleTick(now);' },
+                    { o: null, n: 45, t: '+', c: '>>>>>>> origin/feat/mirror-sync' }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          id: 'r-diverged',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'coil-vision-pcl',
+          path: 'D:\\Projects\\Industrial\\coil-vision-pcl',
+          branch: 'fix/pointcloud-roi',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 2,
+          behind: 3,
+          hasUpstream: true,
+          upstream: 'origin/fix/pointcloud-roi',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 190,
+          lastCommitHash: '3a7b9d0',
+          previewCommits: [{ hash: '3a7b9d0', title: 'fix(pcl): 收紧塔形卷边缘拟合阈值' }],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-ahead',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'ice-middleware',
+          path: 'D:\\Projects\\Industrial\\ice-middleware',
+          branch: 'refactor/ice-pool',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 3,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/refactor/ice-pool',
+          otherUnpushedBranches: [{ name: 'perf/zero-copy', ahead: 2, upstream: 'origin/perf/zero-copy' }],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 140,
+          lastCommitHash: '88d2c19',
+          previewCommits: [
+            { hash: '88d2c19', title: 'perf(ice): 电文缓冲区改为零拷贝分片' },
+            { hash: '71c3e0a', title: 'refactor(pool): 统一服务代理心跳管理' },
+            { hash: '5209ab1', title: 'test(ice): 补充高频并发断线重连用例' }
+          ],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-behind',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'scada-alarm-ws',
+          path: 'D:\\Projects\\Industrial\\scada-alarm-ws',
+          branch: 'develop',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 4,
+          hasUpstream: true,
+          upstream: 'origin/develop',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 320,
+          lastCommitHash: 'e64b20f',
+          previewCommits: [
+            { hash: 'f91a032', title: 'feat(alarm): 增加二级报警抑制窗口' },
+            { hash: 'd28c110', title: 'fix(ws): 修正断网重连时的序列号对齐' }
+          ],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-timeout',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'esp-line-viz',
+          path: 'D:\\Projects\\Industrial\\esp-line-viz',
+          branch: 'main',
+          isDetached: false,
+          isProtected: true,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/main',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 460,
+          lastCommitHash: '51e7f90',
+          previewCommits: [],
+          errorKind: 'fetch_timeout',
+          errorMessage: 'Fetch 超时 (15s)',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-failed',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Industrial',
+          name: 'legacy-opc-bridge',
+          path: 'D:\\Projects\\Industrial\\legacy-opc-bridge',
+          branch: '-',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 0,
+          hasUpstream: false,
+          upstream: '',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 0,
+          worktreeDirty: 0,
+          lastCommitMins: 99999,
+          lastCommitHash: '',
+          previewCommits: [],
+          errorKind: 'read_failed',
+          errorMessage: '读取失败：缺少有效的 .git/HEAD',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-no-upstream',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Tools',
+          name: 'cmake-toolchain',
+          path: 'D:\\Projects\\Tools\\cmake-toolchain',
+          branch: 'exp/mingw-preset',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 0,
+          hasUpstream: false,
+          upstream: '',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 520,
+          lastCommitHash: 'd903e12',
+          previewCommits: [],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-detached',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Tools',
+          name: 'tauri-git-bridge',
+          path: 'D:\\Projects\\Tools\\tauri-git-bridge',
+          branch: 'f192d04',
+          isDetached: true,
+          isProtected: false,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 0,
+          hasUpstream: false,
+          upstream: '',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 1440,
+          lastCommitHash: 'f192d04',
+          previewCommits: [],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-clean',
+          wsId: 'ws-industrial',
+          sourceDir: 'D:\\Projects\\Tools',
+          name: 'win-deploy-kit',
+          path: 'D:\\Projects\\Tools\\win-deploy-kit',
+          branch: 'main',
+          isDetached: false,
+          isProtected: true,
+          hasNewChanges: false,
+          changeSummary: '',
+          modified: 0,
+          untracked: 0,
+          conflicts: 0,
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/main',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 2880,
+          lastCommitHash: '22f09c8',
+          previewCommits: [],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: []
+        },
+        {
+          id: 'r-personal-1',
+          wsId: 'ws-personal',
+          sourceDir: 'D:\\Personal\\Repos',
+          name: 'm4-mlx-agent',
+          path: 'D:\\Personal\\Repos\\m4-mlx-agent',
+          branch: 'exp/60fps',
+          isDetached: false,
+          isProtected: false,
+          hasNewChanges: true,
+          changeSummary: 'Agent 刚修改 pipeline/capture.py',
+          modified: 1,
+          untracked: 1,
+          conflicts: 0,
+          ahead: 1,
+          behind: 0,
+          hasUpstream: true,
+          upstream: 'origin/exp/60fps',
+          otherUnpushedBranches: [],
+          stashCount: 0,
+          stashes: [],
+          worktreeTotal: 1,
+          worktreeDirty: 0,
+          lastCommitMins: 15,
+          lastCommitHash: '7bc21a9',
+          previewCommits: [{ hash: '7bc21a9', title: 'perf: 切换 fp16 降低显存带宽' }],
+          errorKind: null,
+          errorMessage: '',
+          refreshState: 'idle',
+          files: [
+            {
+              group: '未暂存', tag: 'M', tagStyle: 'dirty', path: 'pipeline/capture.py', type: 'text',
+              hunks: [
+                {
+                  header: '@@ -60,3 +60,4 @@ def capture():',
+                  lines: [
+                    { o: 60, n: null, t: '-', c: '    return mx.array(buf, dtype=mx.float32)' },
+                    { o: null, n: 60, t: '+', c: '    return mx.array(buf, dtype=mx.float16)' }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ];
+
+      /* =====================================================================
+         APPLICATION STATE
+         ===================================================================== */
+      const state = {
+        activeWsId: 'ws-industrial',
+        viewMode: 'sentinel',       // 'sentinel' | 'wrapup'
+        filter: 'all',              // 'all' | 'new' | 'dirty' | 'unsynced' | 'conflict' | 'no_upstream'
+        search: '',
+        collapsedGroups: new Set(),
+        selectedIds: new Set(),
+        wrapupSelectedKeys: new Set(),
+        activeRepoId: null,
+        detailWidth: 640,
+        compareMode: 'work_head',   // 'work_head' | 'work_stage' | 'stage_head' | 'local_upstream'
+        diffStyle: 'inline',        // 'inline' | 'split'
+        activeFileIndex: 0,
+        activeHunkIndex: 0,
+        imgZoom: 100,
+        showFetchBanner: true,
+        simEmptyWs: false,
+        secondsSinceRefresh: 3,
+        batchOp: null               // { type: 'push'|'pull'|'switch', phase: 'preview'|'running'|'done', items: [] }
+      };
+
+      /* =====================================================================
+         HELPERS: PRIORITY SORTING, STATUS COMPUTATION, TIME
+         ===================================================================== */
+      function isDirty(r) { return r.modified > 0 || r.untracked > 0 || r.conflicts > 0; }
+      function isDiverged(r) { return r.ahead > 0 && r.behind > 0; }
+      function hasProtectedRisk(r) { return r.isProtected && (isDirty(r) || r.ahead > 0); }
+      function hasOtherUnpushed(r) { return (r.otherUnpushedBranches || []).length > 0; }
+      function isUnsynced(r) { return r.ahead > 0 || r.behind > 0 || hasOtherUnpushed(r); }
+
+      function getPriorityTier(r) {
+        if (r.hasNewChanges) return 1;
+        if (r.conflicts > 0 || isDiverged(r)) return 2;
+        if (hasProtectedRisk(r)) return 3;
+        if (isDirty(r)) return 4;
+        if (r.errorKind) return 5;
+        if (r.ahead > 0 || hasOtherUnpushed(r)) return 6;
+        if (r.behind > 0) return 7;
+        return 8;
+      }
+
+      function getBarColor(r) {
+        if (r.errorKind === 'read_failed' || r.errorKind === 'fetch_timeout') return 'var(--status-danger-bar)';
+        if (r.hasNewChanges) return 'var(--status-new-bar)';
+        if (r.conflicts > 0 || isDiverged(r) || hasProtectedRisk(r)) return 'var(--status-danger-bar)';
+        if (isDirty(r)) return 'var(--status-dirty-bar)';
+        if (r.ahead > 0 || r.behind > 0 || hasOtherUnpushed(r)) return 'var(--status-sync-bar)';
+        if (!r.hasUpstream || r.isDetached) return 'var(--status-neutral-bar)';
+        return 'var(--status-clean-bar)';
+      }
+
+      function formatAgo(mins) {
+        if (mins >= 99999) return '—';
+        if (mins < 2) return '刚刚';
+        if (mins < 60) return `${mins} 分钟前`;
+        const h = Math.floor(mins / 60);
+        if (h < 24) return `${h} 小时前`;
+        return `${Math.floor(h / 24)} 天前`;
+      }
+
+      function toast(msg) {
+        const stack = document.getElementById('toast-stack');
+        const el = document.createElement('div');
+        el.className = 'toast-item';
+        el.textContent = msg;
+        stack.appendChild(el);
+        setTimeout(() => el.remove(), 2600);
+      }
+
+      function getCurrentWsRepos() {
+        return repos.filter(r => r.wsId === state.activeWsId);
+      }
+
+      /* =====================================================================
+         RENDER: SIDEBAR & TOPBAR
+         ===================================================================== */
+      function renderSidebar() {
+        const list = document.getElementById('workspace-list');
+        document.getElementById('ws-total-count').textContent = state.simEmptyWs ? '0' : workspaces.length;
+        if (state.simEmptyWs) {
+          list.innerHTML = `<div style="padding:12px 8px; font-size:12px; color:var(--text-muted);">暂无工作区</div>`;
+          return;
+        }
+        list.innerHTML = workspaces.map(ws => {
+          const wsRepos = repos.filter(r => r.wsId === ws.id);
+          const hasNew = wsRepos.some(r => r.hasNewChanges);
+          const hasDirty = wsRepos.some(isDirty);
+          const dotColor = hasNew ? 'var(--status-new-bar)' : (hasDirty ? 'var(--status-dirty-bar)' : 'var(--status-clean-bar)');
+          return `
+            <div class="ws-item ${ws.id === state.activeWsId ? 'active' : ''}" data-select-ws="${ws.id}">
+              <div class="ws-item-left">
+                <span class="ws-dot" style="background:${dotColor};"></span>
+                <span class="ws-name">${ws.name}</span>
+              </div>
+              <span class="ws-count mono">${wsRepos.length}</span>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function renderTopbar() {
+        const ws = workspaces.find(w => w.id === state.activeWsId);
+        const wsRepos = getCurrentWsRepos();
+        document.getElementById('topbar-ws-name').textContent = ws ? ws.name : '';
+
+        const dirtyCnt = wsRepos.filter(isDirty).length;
+        const newCnt = wsRepos.filter(r => r.hasNewChanges).length;
+        const unsyncCnt = wsRepos.filter(isUnsynced).length;
+        document.getElementById('topbar-summary').innerHTML = `
+          <span>${wsRepos.length} 仓库</span>
+          ${newCnt ? `<span style="color:var(--status-new-fg);">· ${newCnt} 新变化</span>` : ''}
+          ${dirtyCnt ? `<span style="color:var(--status-dirty-fg);">· ${dirtyCnt} 有改动</span>` : ''}
+          ${unsyncCnt ? `<span style="color:var(--status-sync-fg);">· ${unsyncCnt} 未同步</span>` : ''}
+        `;
+
+        // Wrap-up count
+        const wrapupItems = buildWrapupItems();
+        document.getElementById('wrapup-badge-count').textContent = wrapupItems.length;
+
+        // Mode switcher active state
+        document.querySelectorAll('#main-mode-seg button').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.view === state.viewMode);
+        });
+        document.getElementById('sentinel-container').classList.toggle('hidden', state.viewMode !== 'sentinel');
+        document.getElementById('wrapup-container').classList.toggle('hidden', state.viewMode !== 'wrapup');
+        document.getElementById('fetch-banner').classList.toggle('hidden', !state.showFetchBanner || state.activeWsId !== 'ws-industrial');
+      }
+
+      /* =====================================================================
+         RENDER: FILTER BAR & ONE-LEVEL GROUPED LIST (4.2)
+         ===================================================================== */
+      function renderFilterBar() {
+        const wsRepos = getCurrentWsRepos();
+        const counts = {
+          all: wsRepos.length,
+          new: wsRepos.filter(r => r.hasNewChanges).length,
+          dirty: wsRepos.filter(isDirty).length,
+          unsynced: wsRepos.filter(isUnsynced).length,
+          conflict: wsRepos.filter(r => r.conflicts > 0 || isDiverged(r)).length,
+          no_upstream: wsRepos.filter(r => !r.hasUpstream && !r.isDetached && !r.errorKind).length
+        };
+
+        const defs = [
+          { id: 'all', label: '全部' },
+          { id: 'new', label: '✦ 有新变化' },
+          { id: 'dirty', label: '● 有改动' },
+          { id: 'unsynced', label: '⇅ 未同步' },
+          { id: 'conflict', label: '▲ 冲突/分叉' },
+          { id: 'no_upstream', label: '○ 无上游' }
+        ];
+
+        document.getElementById('filter-chips').innerHTML = defs.map(d => `
+          <button type="button" class="fchip ${state.filter === d.id ? 'active' : ''}" data-filter="${d.id}">
+            <span>${d.label}</span>
+            <span class="fchip-count">${counts[d.id]}</span>
+          </button>
+        `).join('');
+
+        const markAllBtn = document.getElementById('btn-mark-all-seen');
+        document.getElementById('new-change-total').textContent = counts.new;
+        markAllBtn.classList.toggle('hidden', counts.new === 0);
+
+        // Bulk bar
+        const bulkBar = document.getElementById('bulk-bar');
+        document.getElementById('bulk-count').textContent = state.selectedIds.size;
+        bulkBar.classList.toggle('hidden', state.selectedIds.size === 0);
+      }
+
+      function renderWorktreeStatusCell(r) {
+        if (r.refreshState === 'refreshing') {
+          return `<span class="badge badge-neutral"><span class="spin">◌</span> 刷新中...</span>`;
+        }
+        if (r.errorKind === 'read_failed') {
+          return `<span class="badge badge-danger badge-dashed" title="${r.errorMessage}">✕ 读取失败</span>`;
+        }
+        if (r.conflicts > 0) {
+          return `<span class="badge badge-danger">▲ ${r.conflicts} 冲突${r.modified ? ` · ${r.modified}改` : ''}</span>`;
+        }
+        if (r.modified > 0 || r.untracked > 0) {
+          const parts = [];
+          if (r.modified) parts.push(`${r.modified}改`);
+          if (r.untracked) parts.push(`${r.untracked}未跟踪`);
+          return `<span class="badge badge-dirty">● ${parts.join(' · ')}</span>`;
+        }
+        return `<span class="badge badge-clean">✓ 干净</span>`;
+      }
+
+      function renderRemoteAndExtrasCell(r) {
+        if (r.refreshState === 'fetching') {
+          return `<span class="badge badge-sync"><span class="spin">◌</span> Fetch 中...</span>`;
+        }
+        if (r.errorKind === 'read_failed') {
+          return `<span style="font-size:11px; color:var(--status-danger-fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${r.errorMessage}</span>`;
+        }
+        if (r.errorKind === 'fetch_timeout') {
+          return `<span class="badge badge-danger badge-dashed" title="${r.errorMessage}">⌛ Fetch 超时</span>`;
+        }
+
+        const items = [];
+        if (r.isDetached) {
+          items.push(`<span class="badge badge-neutral badge-dashed">☍ 游离 HEAD</span>`);
+        } else if (!r.hasUpstream) {
+          items.push(`<span class="badge badge-neutral badge-dashed">○ 无上游</span>`);
+        } else if (isDiverged(r)) {
+          items.push(`<span class="badge badge-danger mono">⇅ 分叉 ↑${r.ahead} ↓${r.behind}</span>`);
+        } else if (r.ahead > 0) {
+          items.push(`<span class="badge badge-sync mono">↑ 超前 ${r.ahead}</span>`);
+        } else if (r.behind > 0) {
+          items.push(`<span class="badge badge-sync mono">↓ 落后 ${r.behind}</span>`);
+        } else {
+          items.push(`<span style="font-size:11px; color:var(--text-muted);">✓ 已同步</span>`);
+        }
+
+        if (hasOtherUnpushed(r)) {
+          items.push(`<span class="badge badge-sync" title="其他分支还有未推送提交">另 ${r.otherUnpushedBranches.length} 分支未推</span>`);
+        }
+        if (r.stashCount > 0) {
+          items.push(`<span class="badge badge-neutral mono" title="${r.stashCount} 条 stash">◫ stash ${r.stashCount}</span>`);
+        }
+        if (r.worktreeTotal > 1) {
+          const wtLabel = r.worktreeDirty > 0 ? `⊞ wt ${r.worktreeTotal}(${r.worktreeDirty}改)` : `⊞ wt ${r.worktreeTotal}`;
+          items.push(`<span class="badge ${r.worktreeDirty > 0 ? 'badge-dirty' : 'badge-neutral'} mono" title="共 ${r.worktreeTotal} 个 worktree，其中 ${r.worktreeDirty} 个有改动">${wtLabel}</span>`);
+        }
+        return items.join('');
+      }
+
+      function renderRepoList() {
+        const vp = document.getElementById('repo-list-viewport');
+        let list = getCurrentWsRepos();
+
+        if (state.filter === 'new') list = list.filter(r => r.hasNewChanges);
+        else if (state.filter === 'dirty') list = list.filter(isDirty);
+        else if (state.filter === 'unsynced') list = list.filter(isUnsynced);
+        else if (state.filter === 'conflict') list = list.filter(r => r.conflicts > 0 || isDiverged(r));
+        else if (state.filter === 'no_upstream') list = list.filter(r => !r.hasUpstream && !r.isDetached && !r.errorKind);
+
+        if (state.search.trim()) {
+          const q = state.search.trim().toLowerCase();
+          list = list.filter(r =>
+            r.name.toLowerCase().includes(q) ||
+            r.branch.toLowerCase().includes(q) ||
+            r.path.toLowerCase().includes(q)
+          );
+        }
+
+        if (!list.length) {
+          vp.innerHTML = `
+            <div class="state-card">
+              <h4>当前筛选条件下没有匹配的仓库</h4>
+              <p>可以清空搜索词或切换回“全部”查看工作区内全部仓库。</p>
+              <button type="button" class="btn" id="btn-reset-filters">重置筛选</button>
+            </div>
+          `;
+          const resetBtn = document.getElementById('btn-reset-filters');
+          if (resetBtn) resetBtn.onclick = () => {
+            state.filter = 'all';
+            state.search = '';
+            document.getElementById('search-input').value = '';
+            renderAll();
+          };
+          return;
+        }
+
+        // Group by sourceDir
+        const groups = new Map();
+        list.forEach(r => {
+          const key = r.sourceDir || '独立添加的仓库';
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(r);
+        });
+
+        let html = '';
+        groups.forEach((items, dir) => {
+          // Deterministic 8-tier sort inside group
+          items.sort((a, b) => {
+            const diff = getPriorityTier(a) - getPriorityTier(b);
+            if (diff !== 0) return diff;
+            return a.lastCommitMins - b.lastCommitMins;
+          });
+
+          const collapsed = state.collapsedGroups.has(dir);
+          const groupDirty = items.filter(isDirty).length;
+          const groupNew = items.filter(r => r.hasNewChanges).length;
+
+          html += `
+            <div class="group-header" data-toggle-group="${dir}">
+              <div class="group-header-left">
+                <span>${collapsed ? '▸' : '▾'}</span>
+                <span class="group-path">${dir}</span>
+                <span class="mono" style="color:var(--text-muted);">(${items.length})</span>
+              </div>
+              <div class="mono" style="display:flex; gap:8px; font-size:11px;">
+                ${groupNew ? `<span style="color:var(--status-new-fg);">${groupNew} 新变化</span>` : ''}
+                ${groupDirty ? `<span style="color:var(--status-dirty-fg);">${groupDirty} 有改动</span>` : ''}
+              </div>
+            </div>
+          `;
+
+          if (!collapsed) {
+            html += items.map(r => {
+              const barColor = getBarColor(r);
+              const isDashedBar = r.errorKind === 'read_failed' || r.errorKind === 'fetch_timeout';
+              const protectWarn = hasProtectedRisk(r);
+              const branchClass = protectWarn ? 'protected-warn' : (r.isDetached ? 'detached' : '');
+              const branchText = r.isDetached ? `☍ ${r.branch}` : (protectWarn ? `🛡 ${r.branch} · 保护` : `⎇ ${r.branch}`);
+
+              return `
+                <div class="repo-row ${r.id === state.activeRepoId ? 'selected' : ''} ${r.hasNewChanges ? 'is-new' : ''} ${r.refreshState === 'refreshing' ? 'is-refreshing' : ''}"
+                     data-repo-row="${r.id}" id="row-${r.id}">
+                  <div class="row-bar ${isDashedBar ? 'dashed' : ''} ${r.refreshState === 'refreshing' ? 'pulse-bar' : ''}"
+                       style="background:${barColor};"></div>
+                  <div class="col-check" data-stop-row="1">
+                    <input type="checkbox" data-check-repo="${r.id}" ${state.selectedIds.has(r.id) ? 'checked' : ''} />
+                  </div>
+                  <div class="col-name" title="${r.path}">
+                    <div class="name-line">
+                      <span class="repo-title">${r.name}</span>
+                      ${r.hasNewChanges ? `<span class="badge badge-new" title="${r.changeSummary}">✦ 新变化</span>` : ''}
+                    </div>
+                    <div class="col-path">${r.path}</div>
+                  </div>
+                  <div class="col-branch">
+                    <span class="branch-pill ${branchClass}" title="${protectWarn ? '警告：正在保护分支上修改或提交' : r.branch}">${branchText}</span>
+                  </div>
+                  <div class="col-worktree-status">${renderWorktreeStatusCell(r)}</div>
+                  <div class="col-remote">${renderRemoteAndExtrasCell(r)}</div>
+                  <div class="col-time mono">${formatAgo(r.lastCommitMins)}</div>
+                  <div class="col-actions" data-stop-row="1">
+                    ${r.hasNewChanges ? `<button type="button" class="btn btn-ghost btn-icon btn-mark-seen-inline" data-mark-seen="${r.id}" title="标记已查看">✓</button>` : ''}
+                    <button type="button" class="btn btn-ghost btn-icon" data-open-menu="${r.id}" title="更多操作">⋯</button>
+                  </div>
+                </div>
+              `;
+            }).join('');
+          }
+        });
+
+        vp.innerHTML = html;
+      }
+
+      /* =====================================================================
+         RENDER: WRAP-UP CHECK VIEW (4.3 收工检查 - 分支粒度)
+         ===================================================================== */
+      function buildWrapupItems() {
+        const wsRepos = getCurrentWsRepos();
+        const items = [];
+        wsRepos.forEach(r => {
+          if (r.errorKind) return;
+          if (hasProtectedRisk(r)) {
+            items.push({ key: `prot:${r.id}:${r.branch}`, cat: 'protected', repo: r, branch: r.branch, pushable: false, detail: `${r.modified}改 · ${r.untracked}未跟踪 · 超前 ${r.ahead}` });
+          }
+          if (isDirty(r) && !hasProtectedRisk(r)) {
+            items.push({ key: `dirty:${r.id}:${r.branch}`, cat: 'dirty', repo: r, branch: r.branch, pushable: false, detail: `${r.modified}改 · ${r.untracked}未跟踪${r.conflicts ? ` · ${r.conflicts}冲突` : ''}` });
+          }
+          if (r.ahead > 0 && !isDiverged(r)) {
+            const canPush = r.hasUpstream && !r.isProtected;
+            items.push({ key: `push:${r.id}:${r.branch}`, cat: 'unpushed', repo: r, branch: r.branch, ahead: r.ahead, upstream: r.upstream, pushable: canPush, reason: r.isProtected ? '保护分支需手动确认' : (!r.hasUpstream ? '无上游' : '') });
+          }
+          (r.otherUnpushedBranches || []).forEach(b => {
+            items.push({ key: `push:${r.id}:${b.name}`, cat: 'unpushed', repo: r, branch: b.name, ahead: b.ahead, upstream: b.upstream, pushable: Boolean(b.upstream), isOtherBranch: true });
+          });
+          (r.stashes || []).forEach(s => {
+            items.push({ key: `stash:${r.id}:${s.ref}`, cat: 'stash', repo: r, branch: s.ref, pushable: false, detail: `${s.msg} (${s.age})` });
+          });
+        });
+        return items;
+      }
+
+      function renderWrapupView() {
+        const items = buildWrapupItems();
+        const vp = document.getElementById('wrapup-list-viewport');
+        const pushableCount = items.filter(i => i.pushable).length;
+        const selectedPushCount = items.filter(i => i.pushable && state.wrapupSelectedKeys.has(i.key)).length;
+
+        document.getElementById('wrapup-summary-txt').textContent = `共 ${items.length} 条未收尾项（其中 ${pushableCount} 个分支可一键推送）`;
+        const pushBtn = document.getElementById('btn-wrapup-push');
+        pushBtn.textContent = selectedPushCount > 0 ? `推送 ${selectedPushCount} 个分支` : '推送选中分支';
+        pushBtn.disabled = selectedPushCount === 0;
+
+        if (!items.length) {
+          vp.innerHTML = `<div class="state-card"><h4>✓ 当前工作区已全部收工</h4><p>没有未提交改动、未推送分支或遗留 stash。</p></div>`;
+          return;
+        }
+
+        const sections = [
+          { cat: 'protected', title: '🛡 保护分支上的风险改动' },
+          { cat: 'dirty', title: '● 未提交的工作区改动' },
+          { cat: 'unpushed', title: '↑ 所有分支上的未推送提交（分支粒度）' },
+          { cat: 'stash', title: '◫ 尚未清理的 Stash' }
+        ];
+
+        vp.innerHTML = sections.map(sec => {
+          const secItems = items.filter(i => i.cat === sec.cat);
+          if (!secItems.length) return '';
+          return `
+            <div class="group-header" style="cursor:default;">
+              <div class="group-header-left"><strong>${sec.title}</strong><span class="mono">(${secItems.length})</span></div>
+            </div>
+            ${secItems.map(item => `
+              <div class="wrapup-row">
+                <div class="wrapup-row-left">
+                  ${item.cat === 'unpushed'
+                    ? `<input type="checkbox" data-wrapup-check="${item.key}" ${state.wrapupSelectedKeys.has(item.key) ? 'checked' : ''} ${item.pushable ? '' : 'disabled'} style="accent-color:var(--accent); width:14px; height:14px;" />`
+                    : `<span style="width:14px;"></span>`}
+                  <strong style="min-width:130px;">${item.repo.name}</strong>
+                  <span class="branch-pill ${item.cat === 'protected' ? 'protected-warn' : ''}">${item.branch}</span>
+                  ${item.isOtherBranch ? `<span class="badge badge-neutral">非当前分支</span>` : ''}
+                  ${item.cat === 'unpushed'
+                    ? `<span class="badge badge-sync mono">↑ 超前 ${item.ahead}</span><span class="mono" style="font-size:11px; color:var(--text-muted);">${item.upstream || item.reason}</span>`
+                    : `<span style="font-size:12px; color:var(--text-secondary);">${item.detail}</span>`}
+                </div>
+                <div style="display:flex; gap:6px;">
+                  ${item.cat === 'stash'
+                    ? `<button type="button" class="btn btn-sm" data-open-term="${item.repo.id}">在终端打开</button>`
+                    : `<button type="button" class="btn btn-sm" data-inspect-from-wrapup="${item.repo.id}">查看 Diff</button>`}
+                </div>
+              </div>
+            `).join('')}
+          `;
+        }).join('');
+      }
+
+      /* =====================================================================
+         RENDER: DETAIL PANEL & DIFF REVIEWER (4.5)
+         ===================================================================== */
+      function renderDetailPanel() {
+        const shell = document.getElementById('app-shell');
+        const resizer = document.getElementById('detail-resizer');
+        const panel = document.getElementById('detail-panel');
+        const repo = repos.find(r => r.id === state.activeRepoId);
+
+        if (!repo) {
+          shell.classList.remove('detail-open');
+          resizer.classList.add('hidden');
+          panel.classList.add('hidden');
+          return;
+        }
+
+        shell.classList.add('detail-open');
+        resizer.classList.remove('hidden');
+        panel.classList.remove('hidden');
+        panel.style.width = `${state.detailWidth}px`;
+        panel.classList.toggle('narrow', state.detailWidth < 740);
+
+        const compareMeta = {
+          work_head: { label: '工作区 vs HEAD', left: `HEAD (${repo.lastCommitHash || 'HEAD'})`, right: '当前工作区' },
+          work_stage: { label: '工作区 vs 暂存', left: '暂存区 (Index)', right: '当前工作区' },
+          stage_head: { label: '暂存 vs HEAD', left: `HEAD (${repo.lastCommitHash || 'HEAD'})`, right: '暂存区 (Index)' },
+          local_upstream: { label: '本地 vs 上游', left: repo.upstream || '无上游', right: `本地 ${repo.branch}` }
+        }[state.compareMode];
+
+        const files = repo.files || [];
+        if (state.activeFileIndex >= files.length) state.activeFileIndex = 0;
+        const activeFile = files[state.activeFileIndex];
+
+        // Group files in fixed risk order
+        const groupOrder = ['冲突', '暂存后又修改', '已暂存', '未暂存', '未跟踪', '与上游不同'];
+        let fileListHtml = '';
+        if (!files.length) {
+          fileListHtml = `<div style="padding:16px 12px; font-size:12px; color:var(--text-muted);">无改动文件</div>`;
+        } else {
+          groupOrder.forEach(grp => {
+            const grpFiles = files.map((f, idx) => ({ ...f, idx })).filter(f => f.group === grp);
+            if (!grpFiles.length) return;
+            fileListHtml += `<div class="file-group-title"><span>${grp}</span><span class="mono">${grpFiles.length}</span></div>`;
+            fileListHtml += grpFiles.map(f => {
+              const badgeCls = `badge-${f.tagStyle || 'neutral'}`;
+              return `
+                <div class="file-item ${f.idx === state.activeFileIndex ? 'active' : ''}" data-select-file="${f.idx}" title="${f.path}">
+                  <span class="file-tag ${badgeCls}">${f.tag}</span>
+                  <span class="file-path-txt">${f.path}</span>
+                </div>
+              `;
+            }).join('');
+          });
+        }
+
+        // Render Diff Body for active file
+        let diffToolbarHtml = '';
+        let diffBodyHtml = '';
+
+        if (!activeFile) {
+          diffBodyHtml = `
+            <div class="state-card">
+              <div style="font-size:20px; color:var(--status-clean-fg);">✓</div>
+              <h4>当前比较视角下无差异</h4>
+              <p>工作区干净且与目标基准一致，无需审阅改动。</p>
+            </div>
+          `;
+        } else if (activeFile.type === 'text') {
+          const hunks = activeFile.hunks || [];
+          if (state.activeHunkIndex >= hunks.length) state.activeHunkIndex = 0;
+          diffToolbarHtml = `
+            <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+              <span class="mono" style="font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${activeFile.path}</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+              <div class="compare-tabs">
+                <button type="button" class="compare-tab ${state.diffStyle === 'inline' ? 'active' : ''}" data-diff-style="inline">内联</button>
+                <button type="button" class="compare-tab ${state.diffStyle === 'split' ? 'active' : ''}" data-diff-style="split">并排</button>
+              </div>
+              <button type="button" class="btn btn-sm" id="btn-prev-hunk" title="上一处差异 ([)">↑</button>
+              <span class="mono">${hunks.length ? `${state.activeHunkIndex + 1} / ${hunks.length}` : '0 / 0'} 处差异</span>
+              <button type="button" class="btn btn-sm" id="btn-next-hunk" title="下一处差异 (])">↓</button>
+            </div>
+          `;
+
+          if (state.diffStyle === 'inline') {
+            diffBodyHtml = `<table class="diff-table"><tbody>` + hunks.map((h, hi) => `
+              <tr class="diff-hunk-row ${hi === state.activeHunkIndex ? 'active-hunk' : ''}" id="hunk-${hi}">
+                <td class="diff-ln">…</td><td class="diff-ln">…</td><td class="diff-code">${h.header}</td>
+              </tr>
+              ${h.lines.map(l => `
+                <tr class="${l.t === '+' ? 'diff-line-add' : (l.t === '-' ? 'diff-line-del' : '')}">
+                  <td class="diff-ln">${l.o ?? ''}</td>
+                  <td class="diff-ln">${l.n ?? ''}</td>
+                  <td class="diff-code">${l.t} ${l.c.replace(/</g, '&lt;')}</td>
+                </tr>
+              `).join('')}
+            `).join('') + `</tbody></table>`;
+          } else {
+            // Side-by-side Split Diff
+            diffBodyHtml = `<table class="diff-table"><tbody>` + hunks.map((h, hi) => `
+              <tr class="diff-hunk-row ${hi === state.activeHunkIndex ? 'active-hunk' : ''}" id="hunk-${hi}">
+                <td class="diff-ln">…</td><td class="diff-code" colspan="3">${h.header}</td>
+              </tr>
+              ${h.lines.map(l => `
+                <tr>
+                  <td class="diff-ln">${l.t === '+' ? '' : (l.o ?? '')}</td>
+                  <td class="diff-code ${l.t === '-' ? 'diff-line-del' : ''}" style="width:50%; border-right:1px solid var(--border-subtle);">${l.t === '+' ? '' : l.c.replace(/</g, '&lt;')}</td>
+                  <td class="diff-ln">${l.t === '-' ? '' : (l.n ?? '')}</td>
+                  <td class="diff-code ${l.t === '+' ? 'diff-line-add' : ''}" style="width:50%;">${l.t === '-' ? '' : l.c.replace(/</g, '&lt;')}</td>
+                </tr>
+              `).join('')}
+            `).join('') + `</tbody></table>`;
+          }
+        } else if (activeFile.type === 'image') {
+          diffToolbarHtml = `
+            <span class="mono" style="font-weight:600;">${activeFile.path}（图片并排对比）</span>
+            <div style="display:flex; align-items:center; gap:5px;">
+              <button type="button" class="btn btn-sm" data-img-zoom="-25">-</button>
+              <span class="mono">${state.imgZoom}%</span>
+              <button type="button" class="btn btn-sm" data-img-zoom="25">+</button>
+              <button type="button" class="btn btn-sm" data-img-preset="fit">适应窗口</button>
+              <button type="button" class="btn btn-sm" data-img-preset="100">实际大小 1:1</button>
+            </div>
+          `;
+          const px = Math.round(96 * (state.imgZoom / 100));
+          diffBodyHtml = `
+            <div class="img-diff-stage">
+              <div class="img-diff-box">
+                <div style="font-size:11px; color:var(--text-secondary);">修改前 · ${compareMeta.left}</div>
+                <div class="img-checker">
+                  <svg width="${px}" height="${px}" viewBox="0 0 128 128">
+                    <rect x="6" y="6" width="116" height="116" rx="24" fill="#1e293b"/>
+                    <circle cx="64" cy="64" r="24" fill="${activeFile.oldMeta.color}"/>
+                  </svg>
+                </div>
+                <div class="mono" style="font-size:11px; color:var(--text-muted);">${activeFile.oldMeta.width}×${activeFile.oldMeta.height} · ${activeFile.oldMeta.size}</div>
+              </div>
+              <div class="img-diff-box">
+                <div style="font-size:11px; color:var(--text-secondary);">修改后 · ${compareMeta.right}</div>
+                <div class="img-checker">
+                  <svg width="${px}" height="${px}" viewBox="0 0 128 128">
+                    <rect x="6" y="6" width="116" height="116" rx="28" fill="#181c24" stroke="#475569" stroke-width="4"/>
+                    <path d="M36 92V68C36 53 47 46 60 54L64 57M92 36V60C92 75 81 82 68 74L64 71" stroke="#f8fafc" stroke-width="10" stroke-linecap="round"/>
+                    <circle cx="64" cy="64" r="14" fill="${activeFile.newMeta.color}"/>
+                  </svg>
+                </div>
+                <div class="mono" style="font-size:11px; color:var(--text-muted);">${activeFile.newMeta.width}×${activeFile.newMeta.height} · ${activeFile.newMeta.size}</div>
+              </div>
+            </div>
+          `;
+        } else if (activeFile.type === 'large') {
+          diffBodyHtml = `
+            <div class="state-card">
+              <h4>文件体积过大，已跳过内联渲染</h4>
+              <p><span class="mono">${activeFile.path}</span> 体积为 <strong>${activeFile.sizeText}</strong>，为保持审阅流畅默认不展开全文 Diff。</p>
+              <button type="button" class="btn" onclick="alert('将调用外部编辑器 VS Code 打开该大文件')">在 VS Code 中打开</button>
+            </div>
+          `;
+        } else if (activeFile.type === 'binary') {
+          diffBodyHtml = `
+            <div class="state-card">
+              <h4>二进制文件不支持文本对比</h4>
+              <p class="mono">${activeFile.path}<br/>${activeFile.oldSize} → ${activeFile.newSize}</p>
+              <button type="button" class="btn" onclick="alert('将在资源管理器中定位该文件')">在资源管理器中显示</button>
+            </div>
+          `;
+        } else if (activeFile.type === 'error') {
+          diffBodyHtml = `
+            <div class="state-card" style="border-color:var(--status-danger-border);">
+              <h4 style="color:var(--status-danger-fg);">✕ 文件读取失败</h4>
+              <p>${activeFile.errorDetail}</p>
+              <button type="button" class="btn" id="btn-retry-file">重试读取</button>
+            </div>
+          `;
+        }
+
+        panel.innerHTML = `
+          <div class="detail-header">
+            <div class="detail-title-row">
+              <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+                <strong style="font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${repo.name}</strong>
+                <span class="branch-pill ${hasProtectedRisk(repo) ? 'protected-warn' : ''}">${repo.branch}</span>
+                ${repo.hasNewChanges ? `<button type="button" class="btn btn-sm" data-mark-seen="${repo.id}" style="border-color:var(--status-new-border); color:var(--status-new-fg); background:var(--status-new-bg);">✓ 标记已查看</button>` : ''}
+              </div>
+              <div style="display:flex; align-items:center; gap:4px;">
+                <span class="mono" style="font-size:10.5px; color:var(--text-muted);">${state.detailWidth}px</span>
+                <button type="button" class="btn btn-ghost btn-icon" id="btn-close-detail" title="关闭面板 (Esc)">✕</button>
+              </div>
+            </div>
+            <div class="compare-row">
+              <div class="compare-tabs">
+                <button type="button" class="compare-tab ${state.compareMode === 'work_head' ? 'active' : ''}" data-compare="work_head">工作区 vs HEAD</button>
+                <button type="button" class="compare-tab ${state.compareMode === 'work_stage' ? 'active' : ''}" data-compare="work_stage">工作区 vs 暂存</button>
+                <button type="button" class="compare-tab ${state.compareMode === 'stage_head' ? 'active' : ''}" data-compare="stage_head">暂存 vs HEAD</button>
+                <button type="button" class="compare-tab ${state.compareMode === 'local_upstream' ? 'active' : ''}" data-compare="local_upstream">本地 vs 上游</button>
+              </div>
+              <div class="compare-direction mono">
+                <span>左：${compareMeta.left}</span>
+                <strong style="color:var(--accent);">→</strong>
+                <span>右：${compareMeta.right}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-body">
+            <div class="file-list-pane">${fileListHtml}</div>
+            <div class="diff-pane">
+              ${diffToolbarHtml ? `<div class="diff-toolbar">${diffToolbarHtml}</div>` : ''}
+              <div class="diff-content">${diffBodyHtml}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      /* =====================================================================
+         BATCH WRITE MODAL (4.4 预览 / 执行中 / 执行完毕 三态)
+         ===================================================================== */
+      function openBatchModal(type, customItems = null) {
+        const selectedRepos = customItems || repos.filter(r => state.selectedIds.has(r.id));
+        const items = selectedRepos.map(entry => {
+          const r = entry.repo || entry;
+          const branch = entry.branch || r.branch;
+          let eligible = true;
+          let blockReason = '';
+          const commits = r.previewCommits && r.previewCommits.length
+            ? r.previewCommits
+            : [{ hash: r.lastCommitHash || 'a1b2c3d', title: 'chore: 同步最新分支提交' }];
+
+          if (type === 'push') {
+            if (r.errorKind) { eligible = false; blockReason = '仓库状态异常'; }
+            else if (r.isDetached) { eligible = false; blockReason = '游离 HEAD'; }
+            else if (!r.hasUpstream && !entry.upstream) { eligible = false; blockReason = '当前分支无上游'; }
+            else if (r.isProtected && !entry.isOtherBranch) { eligible = false; blockReason = '位于保护分支 main'; }
+            else if (isDiverged(r)) { eligible = false; blockReason = '与远端分叉，禁止非快进推送'; }
+            else if ((entry.ahead ?? r.ahead) <= 0) { eligible = false; blockReason = '无待推送提交'; }
+          } else if (type === 'pull') {
+            if (r.errorKind) { eligible = false; blockReason = '仓库状态异常'; }
+            else if (isDirty(r)) { eligible = false; blockReason = '工作区有未提交改动'; }
+            else if (!r.hasUpstream) { eligible = false; blockReason = '当前分支无上游'; }
+            else if (isDiverged(r)) { eligible = false; blockReason = '已分叉，无法 pull --ff-only'; }
+            else if (r.behind <= 0) { eligible = false; blockReason = '已是最新，无需拉取'; }
+          } else if (type === 'switch') {
+            if (r.errorKind) { eligible = false; blockReason = '仓库状态异常'; }
+            else if (isDirty(r)) { eligible = false; blockReason = '工作区有改动，禁止切换'; }
+          }
+
+          return {
+            repoId: r.id,
+            name: r.name,
+            branch,
+            count: type === 'push' ? (entry.ahead ?? r.ahead) : (type === 'pull' ? r.behind : 0),
+            commits,
+            expanded: false,
+            eligible,
+            blockReason,
+            execState: 'pending', // 'pending'|'running'|'success'|'skipped_drift'|'failed'
+            execMessage: ''
+          };
+        });
+
+        state.batchOp = { type, phase: 'preview', targetBranch: 'main', items };
+        document.getElementById('batch-modal').classList.remove('hidden');
+        renderBatchModal();
+      }
+
+      function renderBatchModal() {
+        const op = state.batchOp;
+        if (!op) return;
+        const titleMap = { push: '批量推送 (git push · 非强制)', pull: '批量快进拉取 (pull --ff-only)', switch: '批量切换分支（仅限干净仓库）' };
+        document.getElementById('batch-modal-title').textContent = titleMap[op.type];
+
+        const body = document.getElementById('batch-modal-body');
+        const foot = document.getElementById('batch-modal-foot');
+
+        const eligibleItems = op.items.filter(i => i.eligible);
+        const blockedItems = op.items.filter(i => !i.eligible);
+
+        if (op.phase === 'preview') {
+          const switchInput = op.type === 'switch' ? `
+            <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg-surface-subtle); border:1px solid var(--border-subtle); border-radius:6px;">
+              <span style="font-size:12px; font-weight:600;">目标分支：</span>
+              <input type="text" id="batch-target-branch" value="${op.targetBranch}"
+                     style="height:26px; width:200px; padding:0 8px; border:1px solid var(--border-default); border-radius:4px; background:var(--bg-input); font-family:var(--font-mono); font-size:12px;" />
+            </div>
+          ` : '';
+
+          body.innerHTML = `
+            ${switchInput}
+            <div style="font-size:12px; color:var(--text-secondary);">
+              可执行 <strong>${eligibleItems.length}</strong> 项，不可执行 <strong>${blockedItems.length}</strong> 项。操作不可撤销，请先核对以下清单：
+            </div>
+            ${eligibleItems.map((it, idx) => `
+              <div class="batch-item">
+                <div class="batch-item-row">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <strong>${it.name}</strong>
+                    <span class="branch-pill">${it.branch}</span>
+                    ${op.type !== 'switch' ? `<span class="badge badge-sync mono">${op.type === 'push' ? `↑ 推送 ${it.count} 提交` : `↓ 拉取 ${it.count} 提交`}</span>` : `<span class="badge badge-clean">→ ${op.targetBranch}</span>`}
+                  </div>
+                  ${op.type !== 'switch' ? `<button type="button" class="btn btn-ghost btn-sm" data-expand-batch="${idx}">${it.expanded ? '收起提交 ▴' : '展开提交 ▾'}</button>` : ''}
+                </div>
+                ${it.expanded ? `
+                  <div class="batch-commits mono">
+                    ${it.commits.map(c => `<div><span style="color:var(--accent);">${c.hash}</span> ${c.title}</div>`).join('')}
+                  </div>
+                ` : ''}
+              </div>
+            `).join('')}
+            ${blockedItems.length ? `
+              <div style="font-size:11.5px; font-weight:600; color:var(--text-muted); margin-top:4px;">不可执行（将自动排除）</div>
+              ${blockedItems.map(it => `
+                <div class="batch-item" style="opacity:0.75; background:var(--bg-surface-subtle);">
+                  <div class="batch-item-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <span>${it.name}</span>
+                      <span class="branch-pill">${it.branch}</span>
+                    </div>
+                    <span class="badge badge-danger">${it.blockReason}</span>
+                  </div>
+                </div>
+              `).join('')}
+            ` : ''}
+          `;
+
+          const actionLabel = op.type === 'push'
+            ? `推送 ${eligibleItems.length} 个分支`
+            : (op.type === 'pull' ? `快进拉取 ${eligibleItems.length} 个仓库` : `切换 ${eligibleItems.length} 个仓库分支`);
+
+          foot.innerHTML = `
+            <span style="font-size:11px; color:var(--text-muted);">执行前将再次校验工作区状态，漂移则自动跳过</span>
+            <div style="display:flex; gap:8px;">
+              <button type="button" class="btn" id="btn-batch-cancel">取消</button>
+              <button type="button" class="btn btn-primary" id="btn-batch-confirm" ${eligibleItems.length === 0 ? 'disabled' : ''}>${actionLabel}</button>
+            </div>
+          `;
+        } else {
+          // Running or Done phase
+          const doneCount = eligibleItems.filter(i => i.execState !== 'pending' && i.execState !== 'running').length;
+          const pct = eligibleItems.length ? Math.round((doneCount / eligibleItems.length) * 100) : 100;
+          const okCnt = eligibleItems.filter(i => i.execState === 'success').length;
+          const skipCnt = eligibleItems.filter(i => i.execState === 'skipped_drift').length;
+          const failCnt = eligibleItems.filter(i => i.execState === 'failed').length;
+
+          body.innerHTML = `
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px;">
+                <strong>${op.phase === 'running' ? `正在逐个执行 (${doneCount} / ${eligibleItems.length})...` : `执行完毕：${okCnt} 成功 · ${skipCnt} 跳过 · ${failCnt} 失败`}</strong>
+                <span class="mono">${pct}%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:${pct}%;"></div></div>
+            </div>
+            ${eligibleItems.map(it => {
+              let statusBadge = `<span class="badge badge-neutral">○ 排队中</span>`;
+              if (it.execState === 'running') statusBadge = `<span class="badge badge-sync"><span class="spin">◌</span> 执行中...</span>`;
+              else if (it.execState === 'success') statusBadge = `<span class="badge badge-clean">✓ 成功</span>`;
+              else if (it.execState === 'skipped_drift') statusBadge = `<span class="badge badge-dirty">⊘ 已跳过（状态漂移）</span>`;
+              else if (it.execState === 'failed') statusBadge = `<span class="badge badge-danger">✕ 失败</span>`;
+              return `
+                <div class="batch-item">
+                  <div class="batch-item-row">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                      <strong>${it.name}</strong>
+                      <span class="branch-pill">${it.branch}</span>
+                    </div>
+                    ${statusBadge}
+                  </div>
+                  ${it.execMessage ? `<div class="batch-commits" style="color:var(--text-secondary);">${it.execMessage}</div>` : ''}
+                </div>
+              `;
+            }).join('')}
+          `;
+
+          foot.innerHTML = `
+            <span style="font-size:11px; color:var(--text-muted);">${op.phase === 'running' ? '执行期间请勿关闭窗口' : '已跳过项未做任何写操作'}</span>
+            <button type="button" class="btn btn-primary" id="btn-batch-finish" ${op.phase === 'running' ? 'disabled' : ''}>完成并刷新列表</button>
+          `;
+        }
+      }
+
+      function executeBatchOp() {
+        const op = state.batchOp;
+        op.phase = 'running';
+        const eligible = op.items.filter(i => i.eligible);
+        renderBatchModal();
+
+        let idx = 0;
+        function step() {
+          if (idx >= eligible.length) {
+            op.phase = 'done';
+            renderBatchModal();
+            return;
+          }
+          const cur = eligible[idx];
+          cur.execState = 'running';
+          renderBatchModal();
+
+          setTimeout(() => {
+            // Demonstrate drift skip on 2nd item when >=2 items, so product lead can see the exact drift UX
+            if (idx === 1 && eligible.length >= 2) {
+              cur.execState = 'skipped_drift';
+              cur.execMessage = '执行前二次校验发现状态与预览时不一致（检测到新的本地改动），为保护代码已安全跳过。';
+            } else {
+              cur.execState = 'success';
+              const target = repos.find(r => r.id === cur.repoId);
+              if (target) {
+                if (op.type === 'push') {
+                  if (target.branch === cur.branch) target.ahead = 0;
+                  else target.otherUnpushedBranches = target.otherUnpushedBranches.filter(b => b.name !== cur.branch);
+                } else if (op.type === 'pull') {
+                  target.behind = 0;
+                } else if (op.type === 'switch') {
+                  target.branch = op.targetBranch;
+                }
+              }
+            }
+            idx++;
+            renderBatchModal();
+            step();
+          }, 480);
+        }
+        step();
+      }
+
+      /* =====================================================================
+         STAGGERED ROW-BY-ROW REFRESH & FETCH SIMULATION
+         ===================================================================== */
+      function runRowByRowRefresh(isFocusAuto = false) {
+        const wsRepos = getCurrentWsRepos();
+        const ico = document.getElementById('topbar-refresh-ico');
+        ico.classList.add('spin');
+        document.getElementById('focus-refresh-text').textContent = isFocusAuto ? '自动刷新中...' : '正在刷新 0 / ' + wsRepos.length;
+
+        wsRepos.forEach(r => { r.refreshState = 'refreshing'; });
+        renderRepoList();
+
+        let completed = 0;
+        wsRepos.forEach((r, idx) => {
+          setTimeout(() => {
+            r.refreshState = 'idle';
+            completed++;
+            document.getElementById('focus-refresh-text').textContent = `正在刷新 ${completed} / ${wsRepos.length}`;
+            renderRepoList();
+            const rowEl = document.getElementById(`row-${r.id}`);
+            if (rowEl) rowEl.classList.add('flash-done');
+
+            if (completed === wsRepos.length) {
+              ico.classList.remove('spin');
+              state.secondsSinceRefresh = 0;
+              document.getElementById('focus-refresh-text').textContent = '刚刚刷新';
+              renderTopbar();
+              renderFilterBar();
+            }
+          }, 120 + idx * 85);
+        });
+      }
+
+      function runFetchAll() {
+        const wsRepos = getCurrentWsRepos().filter(r => !r.errorKind);
+        wsRepos.forEach(r => { r.refreshState = 'fetching'; });
+        renderRepoList();
+        toast('正在并发 Fetch 当前工作区远端...');
+        wsRepos.forEach((r, idx) => {
+          setTimeout(() => {
+            r.refreshState = 'idle';
+            renderRepoList();
+          }, 300 + idx * 110);
+        });
+      }
+
+      /* =====================================================================
+         WORKSPACE SETTINGS MODAL
+         ===================================================================== */
+      function openSettingsModal() {
+        const ws = workspaces.find(w => w.id === state.activeWsId);
+        if (!ws) return;
+        document.getElementById('settings-ws-name').textContent = ws.name;
+        document.getElementById('chk-auto-scan').checked = ws.autoScan;
+        renderSettingsTags(ws);
+        document.getElementById('settings-modal').classList.remove('hidden');
+      }
+
+      function renderSettingsTags(ws) {
+        document.getElementById('protected-tags').innerHTML = ws.protectedPatterns.map((p, i) => `
+          <span class="tag-chip">${p}<button type="button" data-del-prot="${i}">×</button></span>
+        `).join('');
+        document.getElementById('settings-dirs-list').innerHTML = ws.sourceDirs.map(d => `
+          <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; background:var(--bg-surface); border:1px solid var(--border-subtle); border-radius:4px;">
+            <span class="mono" style="font-size:11.5px;">${d}</span>
+            <span style="font-size:11px; color:var(--text-muted);">已绑定</span>
+          </div>
+        `).join('');
+        document.getElementById('exclude-tags').innerHTML = ws.excludePatterns.map(p => `
+          <span class="tag-chip">${p}</span>
+        `).join('');
+      }
+
+      /* =====================================================================
+         ROW CONTEXT MENU ("⋯")
+         ===================================================================== */
+      function openRowMenu(repoId, anchorEl) {
+        const r = repos.find(item => item.id === repoId);
+        if (!r) return;
+        const menu = document.getElementById('row-menu');
+        const rect = anchorEl.getBoundingClientRect();
+        menu.style.top = `${Math.min(window.innerHeight - 170, rect.bottom + 4)}px`;
+        menu.style.left = `${Math.max(12, rect.right - 196)}px`;
+        menu.innerHTML = `
+          <button type="button" class="row-menu-item" data-menu-act="explorer" data-id="${r.id}">📁 在资源管理器中打开</button>
+          <button type="button" class="row-menu-item" data-menu-act="terminal" data-id="${r.id}">⌨ 在终端中打开</button>
+          <button type="button" class="row-menu-item" data-menu-act="vscode" data-id="${r.id}">⌘ 在 VS Code 中打开</button>
+          ${r.hasNewChanges ? `<button type="button" class="row-menu-item" data-menu-act="seen" data-id="${r.id}">✓ 标记为已查看</button>` : ''}
+          <div class="row-menu-sep"></div>
+          <button type="button" class="row-menu-item danger" data-menu-act="remove" data-id="${r.id}">✕ 从工作区移除</button>
+        `;
+        menu.classList.remove('hidden');
+      }
+
+      /* =====================================================================
+         DETAIL PANEL RESIZER (480px ~ 1200px)
+         ===================================================================== */
+      function initResizer() {
+        const resizer = document.getElementById('detail-resizer');
+        let dragging = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        resizer.addEventListener('pointerdown', e => {
+          dragging = true;
+          startX = e.clientX;
+          startWidth = state.detailWidth;
+          resizer.classList.add('dragging');
+          resizer.setPointerCapture(e.pointerId);
+        });
+        resizer.addEventListener('pointermove', e => {
+          if (!dragging) return;
+          const delta = startX - e.clientX;
+          state.detailWidth = Math.max(480, Math.min(1200, startWidth + delta));
+          renderDetailPanel();
+        });
+        resizer.addEventListener('pointerup', () => {
+          dragging = false;
+          resizer.classList.remove('dragging');
+        });
+      }
+
+      /* =====================================================================
+         MASTER RENDER & EVENT WIRING
+         ===================================================================== */
+      function renderAll() {
+        document.getElementById('first-run-view').classList.toggle('hidden', !state.simEmptyWs);
+        document.getElementById('main-col').classList.toggle('hidden', state.simEmptyWs);
+        renderSidebar();
+        if (!state.simEmptyWs) {
+          renderTopbar();
+          renderFilterBar();
+          renderRepoList();
+          renderWrapupView();
+          renderDetailPanel();
+        } else {
+          state.activeRepoId = null;
+          renderDetailPanel();
+        }
+      }
+
+      function setThemeMode(mode) {
+        document.querySelectorAll('#theme-seg button').forEach(b => b.classList.toggle('active', b.dataset.themeSet === mode));
+        if (mode === 'system') {
+          const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        } else {
+          document.documentElement.setAttribute('data-theme', mode);
+        }
+      }
+
+      function init() {
+        initResizer();
+
+        // Demo ribbon actions
+        document.getElementById('btn-sim-1100').addEventListener('click', e => {
+          const shell = document.getElementById('app-shell');
+          const active = shell.classList.toggle('sim-1100');
+          e.currentTarget.classList.toggle('active', active);
+        });
+        document.getElementById('btn-sim-focus').addEventListener('click', () => runRowByRowRefresh(true));
+        document.getElementById('btn-sim-empty-ws').addEventListener('click', e => {
+          state.simEmptyWs = !state.simEmptyWs;
+          e.currentTarget.classList.toggle('active', state.simEmptyWs);
+          renderAll();
+        });
+        document.getElementById('btn-sim-fetch-err').addEventListener('click', () => {
+          state.showFetchBanner = !state.showFetchBanner;
+          renderTopbar();
+        });
+
+        // First-run restore
+        document.getElementById('btn-first-restore').addEventListener('click', () => {
+          state.simEmptyWs = false;
+          document.getElementById('btn-sim-empty-ws').classList.remove('active');
+          renderAll();
+        });
+        document.getElementById('btn-first-create').addEventListener('click', () => {
+          state.simEmptyWs = false;
+          document.getElementById('btn-sim-empty-ws').classList.remove('active');
+          renderAll();
+          toast('已创建工作区并完成目录扫描');
+        });
+
+        // Theme switcher
+        document.getElementById('theme-seg').addEventListener('click', e => {
+          const btn = e.target.closest('[data-theme-set]');
+          if (btn) setThemeMode(btn.dataset.themeSet);
+        });
+
+        // Topbar actions
+        document.getElementById('main-mode-seg').addEventListener('click', e => {
+          const btn = e.target.closest('[data-view]');
+          if (!btn) return;
+          state.viewMode = btn.dataset.view;
+          renderTopbar();
+          if (state.viewMode === 'wrapup') renderWrapupView();
+        });
+        document.getElementById('btn-refresh-all').addEventListener('click', () => runRowByRowRefresh(false));
+        document.getElementById('btn-fetch-all').addEventListener('click', runFetchAll);
+        document.getElementById('btn-open-settings').addEventListener('click', openSettingsModal);
+
+        // Fetch error banner
+        document.getElementById('btn-toggle-fetch-details').addEventListener('click', e => {
+          const det = document.getElementById('fetch-banner-details');
+          const hidden = det.classList.toggle('hidden');
+          e.currentTarget.textContent = hidden ? '展开详情 ▾' : '收起详情 ▴';
+        });
+        document.getElementById('btn-close-fetch-banner').addEventListener('click', () => {
+          state.showFetchBanner = false;
+          renderTopbar();
+        });
+        document.getElementById('btn-retry-failed').addEventListener('click', () => {
+          state.showFetchBanner = false;
+          toast('正在重试超时与失败的 2 个仓库...');
+          renderTopbar();
+        });
+
+        // Search & Mark all seen
+        document.getElementById('search-input').addEventListener('input', e => {
+          state.search = e.target.value;
+          renderRepoList();
+        });
+        document.getElementById('btn-mark-all-seen').addEventListener('click', () => {
+          getCurrentWsRepos().forEach(r => { r.hasNewChanges = false; });
+          renderAll();
+          toast('已将当前工作区全部新变化标记为已查看');
+        });
+
+        // Bulk write buttons
+        document.getElementById('btn-bulk-push').addEventListener('click', () => openBatchModal('push'));
+        document.getElementById('btn-bulk-pull').addEventListener('click', () => openBatchModal('pull'));
+        document.getElementById('btn-bulk-switch').addEventListener('click', () => openBatchModal('switch'));
+        document.getElementById('btn-bulk-clear').addEventListener('click', () => {
+          state.selectedIds.clear();
+          renderFilterBar();
+          renderRepoList();
+        });
+
+        // Wrap-up view actions
+        document.getElementById('btn-wrapup-select-all').addEventListener('click', () => {
+          buildWrapupItems().filter(i => i.pushable).forEach(i => state.wrapupSelectedKeys.add(i.key));
+          renderWrapupView();
+        });
+        document.getElementById('btn-wrapup-push').addEventListener('click', () => {
+          const selected = buildWrapupItems().filter(i => i.pushable && state.wrapupSelectedKeys.has(i.key));
+          if (selected.length) openBatchModal('push', selected);
+        });
+
+        // Settings modal
+        document.getElementById('btn-close-settings').addEventListener('click', () => document.getElementById('settings-modal').classList.add('hidden'));
+        document.getElementById('btn-save-settings').addEventListener('click', () => {
+          const ws = workspaces.find(w => w.id === state.activeWsId);
+          if (ws) ws.autoScan = document.getElementById('chk-auto-scan').checked;
+          document.getElementById('settings-modal').classList.add('hidden');
+          toast('工作区设置已保存');
+        });
+        document.getElementById('btn-add-protected').addEventListener('click', () => {
+          const input = document.getElementById('input-add-protected');
+          const val = input.value.trim();
+          const ws = workspaces.find(w => w.id === state.activeWsId);
+          if (val && ws && !ws.protectedPatterns.includes(val)) {
+            ws.protectedPatterns.push(val);
+            input.value = '';
+            renderSettingsTags(ws);
+          }
+        });
+
+        // Global delegated clicks
+        document.addEventListener('click', e => {
+          // Close context menu if clicking outside
+          if (!e.target.closest('#row-menu') && !e.target.closest('[data-open-menu]')) {
+            document.getElementById('row-menu').classList.add('hidden');
+          }
+
+          const wsItem = e.target.closest('[data-select-ws]');
+          if (wsItem) {
+            state.activeWsId = wsItem.dataset.selectWs;
+            state.selectedIds.clear();
+            state.activeRepoId = null;
+            renderAll();
+            return;
+          }
+
+          const filterBtn = e.target.closest('[data-filter]');
+          if (filterBtn) {
+            state.filter = filterBtn.dataset.filter;
+            renderFilterBar();
+            renderRepoList();
+            return;
+          }
+
+          const grpBtn = e.target.closest('[data-toggle-group]');
+          if (grpBtn) {
+            const dir = grpBtn.dataset.toggleGroup;
+            if (state.collapsedGroups.has(dir)) state.collapsedGroups.delete(dir);
+            else state.collapsedGroups.add(dir);
+            renderRepoList();
+            return;
+          }
+
+          const chk = e.target.closest('[data-check-repo]');
+          if (chk) {
+            const id = chk.dataset.checkRepo;
+            if (chk.checked) state.selectedIds.add(id);
+            else state.selectedIds.delete(id);
+            renderFilterBar();
+            return;
+          }
+
+          const markSeen = e.target.closest('[data-mark-seen]');
+          if (markSeen) {
+            const r = repos.find(x => x.id === markSeen.dataset.markSeen);
+            if (r) {
+              r.hasNewChanges = false;
+              renderTopbar();
+              renderFilterBar();
+              renderRepoList();
+              if (state.activeRepoId === r.id) renderDetailPanel();
+              toast(`已将 ${r.name} 标记为已查看`);
+            }
+            return;
+          }
+
+          const menuBtn = e.target.closest('[data-open-menu]');
+          if (menuBtn) {
+            openRowMenu(menuBtn.dataset.openMenu, menuBtn);
+            return;
+          }
+
+          const menuAct = e.target.closest('[data-menu-act]');
+          if (menuAct) {
+            const r = repos.find(x => x.id === menuAct.dataset.id);
+            const act = menuAct.dataset.menuAct;
+            document.getElementById('row-menu').classList.add('hidden');
+            if (!r) return;
+            if (act === 'seen') { r.hasNewChanges = false; renderAll(); }
+            else if (act === 'remove') { toast(`已从工作区移除 ${r.name}（未删除磁盘文件）`); }
+            else { toast(`已调用系统 ${act} 打开 ${r.name}`); }
+            return;
+          }
+
+          const wrapupChk = e.target.closest('[data-wrapup-check]');
+          if (wrapupChk) {
+            const key = wrapupChk.dataset.wrapupCheck;
+            if (wrapupChk.checked) state.wrapupSelectedKeys.add(key);
+            else state.wrapupSelectedKeys.delete(key);
+            renderWrapupView();
+            return;
+          }
+
+          const inspectWrap = e.target.closest('[data-inspect-from-wrapup]');
+          if (inspectWrap) {
+            state.activeRepoId = inspectWrap.dataset.inspectFromWrapup;
+            state.activeFileIndex = 0;
+            state.activeHunkIndex = 0;
+            renderDetailPanel();
+            return;
+          }
+
+          if (!e.target.closest('[data-stop-row]')) {
+            const row = e.target.closest('[data-repo-row]');
+            if (row) {
+              state.activeRepoId = row.dataset.repoRow;
+              state.activeFileIndex = 0;
+              state.activeHunkIndex = 0;
+              renderRepoList();
+              renderDetailPanel();
+              return;
+            }
+          }
+
+          // Detail panel controls
+          if (e.target.closest('#btn-close-detail')) {
+            state.activeRepoId = null;
+            renderRepoList();
+            renderDetailPanel();
+            return;
+          }
+          const compTab = e.target.closest('[data-compare]');
+          if (compTab) {
+            state.compareMode = compTab.dataset.compare;
+            renderDetailPanel();
+            return;
+          }
+          const fileItem = e.target.closest('[data-select-file]');
+          if (fileItem) {
+            state.activeFileIndex = Number(fileItem.dataset.selectFile);
+            state.activeHunkIndex = 0;
+            renderDetailPanel();
+            return;
+          }
+          const styleBtn = e.target.closest('[data-diff-style]');
+          if (styleBtn) {
+            state.diffStyle = styleBtn.dataset.diffStyle;
+            renderDetailPanel();
+            return;
+          }
+          if (e.target.closest('#btn-prev-hunk')) {
+            navigateHunk(-1);
+            return;
+          }
+          if (e.target.closest('#btn-next-hunk')) {
+            navigateHunk(1);
+            return;
+          }
+          const imgZoomBtn = e.target.closest('[data-img-zoom]');
+          if (imgZoomBtn) {
+            state.imgZoom = Math.max(50, Math.min(200, state.imgZoom + Number(imgZoomBtn.dataset.imgZoom)));
+            renderDetailPanel();
+            return;
+          }
+          const imgPreset = e.target.closest('[data-img-preset]');
+          if (imgPreset) {
+            state.imgZoom = imgPreset.dataset.imgPreset === 'fit' ? 100 : 125;
+            renderDetailPanel();
+            return;
+          }
+
+          // Batch modal controls
+          if (e.target.closest('#btn-close-batch') || e.target.closest('#btn-batch-cancel')) {
+            if (state.batchOp && state.batchOp.phase === 'running') return;
+            document.getElementById('batch-modal').classList.add('hidden');
+            state.batchOp = null;
+            return;
+          }
+          const expBatch = e.target.closest('[data-expand-batch]');
+          if (expBatch && state.batchOp) {
+            const eligible = state.batchOp.items.filter(i => i.eligible);
+            const item = eligible[Number(expBatch.dataset.expandBatch)];
+            if (item) { item.expanded = !item.expanded; renderBatchModal(); }
+            return;
+          }
+          if (e.target.closest('#btn-batch-confirm')) {
+            const branchIn = document.getElementById('batch-target-branch');
+            if (branchIn && state.batchOp) state.batchOp.targetBranch = branchIn.value.trim() || 'main';
+            executeBatchOp();
+            return;
+          }
+          if (e.target.closest('#btn-batch-finish')) {
+            document.getElementById('batch-modal').classList.add('hidden');
+            state.batchOp = null;
+            state.selectedIds.clear();
+            state.wrapupSelectedKeys.clear();
+            renderAll();
+            toast('批量操作已完成，列表已同步最新状态');
+            return;
+          }
+
+          // Settings delete tag
+          const delProt = e.target.closest('[data-del-prot]');
+          if (delProt) {
+            const ws = workspaces.find(w => w.id === state.activeWsId);
+            if (ws) { ws.protectedPatterns.splice(Number(delProt.dataset.delProt), 1); renderSettingsTags(ws); }
+            return;
+          }
+        });
+
+        // Keyboard shortcuts (F5, Esc, [, ], ↑, ↓)
+        document.addEventListener('keydown', e => {
+          const inInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName);
+
+          if (e.key === 'F5') {
+            e.preventDefault();
+            runRowByRowRefresh(false);
+            return;
+          }
+          if (e.key === 'Escape') {
+            if (!document.getElementById('batch-modal').classList.contains('hidden')) {
+              if (state.batchOp && state.batchOp.phase !== 'running') {
+                document.getElementById('batch-modal').classList.add('hidden');
+                state.batchOp = null;
+              }
+            } else if (!document.getElementById('settings-modal').classList.contains('hidden')) {
+              document.getElementById('settings-modal').classList.add('hidden');
+            } else if (state.activeRepoId) {
+              state.activeRepoId = null;
+              renderRepoList();
+              renderDetailPanel();
+            } else if (state.selectedIds.size > 0) {
+              state.selectedIds.clear();
+              renderFilterBar();
+              renderRepoList();
+            }
+            return;
+          }
+          if (inInput) return;
+
+          if (state.activeRepoId) {
+            if (e.key === '[') { e.preventDefault(); navigateHunk(-1); }
+            else if (e.key === ']') { e.preventDefault(); navigateHunk(1); }
+            else if (e.key === 'ArrowDown') {
+              const repo = repos.find(r => r.id === state.activeRepoId);
+              if (repo && repo.files.length) {
+                e.preventDefault();
+                state.activeFileIndex = (state.activeFileIndex + 1) % repo.files.length;
+                state.activeHunkIndex = 0;
+                renderDetailPanel();
+              }
+            } else if (e.key === 'ArrowUp') {
+              const repo = repos.find(r => r.id === state.activeRepoId);
+              if (repo && repo.files.length) {
+                e.preventDefault();
+                state.activeFileIndex = (state.activeFileIndex - 1 + repo.files.length) % repo.files.length;
+                state.activeHunkIndex = 0;
+                renderDetailPanel();
+              }
+            }
+          }
+        });
+
+        // Subtle relative refresh timer
+        setInterval(() => {
+          state.secondsSinceRefresh++;
+          const el = document.getElementById('focus-refresh-text');
+          if (el && !el.textContent.includes('正在刷新') && !el.textContent.includes('自动刷新')) {
+            el.textContent = state.secondsSinceRefresh < 60
+              ? `${state.secondsSinceRefresh} 秒前刷新`
+              : `${Math.floor(state.secondsSinceRefresh / 60)} 分钟前刷新`;
+          }
+        }, 1000);
+
+        // Initial boot: pre-open repounion diff panel so reviewer sees full layout immediately
+        state.activeRepoId = 'r-agent-dirty';
+        renderAll();
+      }
+
+      function navigateHunk(dir) {
+        const repo = repos.find(r => r.id === state.activeRepoId);
+        if (!repo) return;
+        const file = repo.files[state.activeFileIndex];
+        if (!file || file.type !== 'text' || !file.hunks.length) return;
+        state.activeHunkIndex = (state.activeHunkIndex + dir + file.hunks.length) % file.hunks.length;
+        renderDetailPanel();
+        const hunkEl = document.getElementById(`hunk-${state.activeHunkIndex}`);
+        if (hunkEl) hunkEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+
+      window.addEventListener('DOMContentLoaded', init);
+    })();
+  </script>
+</body>
+</html>

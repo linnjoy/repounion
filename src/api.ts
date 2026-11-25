@@ -93,6 +93,15 @@ export function cancelFetch(): Promise<void> {
   return invoke("cancel_fetch");
 }
 
+/** 标记已查看：带上界面上看到的指纹，之后再发生的变化仍会提示。 */
+export function ackRepos(items: { path: string; fingerprint: string }[]): Promise<void> {
+  return invoke("ack_repos", { items });
+}
+
+export function setProtectedBranches(workspaceId: string, patterns: string[]): Promise<Workspace> {
+  return invoke("set_protected_branches", { workspaceId, patterns });
+}
+
 export function listRepoChanges(path: string, mode: CompareMode): Promise<ChangeList> {
   return invoke("list_repo_changes", { path, mode });
 }

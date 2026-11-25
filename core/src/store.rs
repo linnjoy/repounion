@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::model::{AppState, SourceDirectory, Workspace};
+use crate::model::{
+    default_protected_branches, AppState, SourceDirectory, Workspace, CONFIG_VERSION,
+};
 use crate::paths::path_key;
 
 pub fn load_state(path: &Path) -> Result<AppState, String> {
@@ -11,15 +13,31 @@ pub fn load_state(path: &Path) -> Result<AppState, String> {
         return Ok(AppState::default());
     }
     let text = std::fs::read_to_string(path).map_err(|err| format!("无法读取配置：{err}"))?;
-    serde_json::from_str(&text).map_err(|err| format!("配置文件已损坏：{err}"))
+    let mut state: AppState =
+        serde_json::from_str(&text).map_err(|err| format!("配置文件已损坏：{err}"))?;
+    // 更新版本写入的配置可能含有本版本不认识的字段，保存时会被丢弃，所以拒绝打开。
+    if state.version > CONFIG_VERSION {
+        return Err(format!(
+            "配置文件版本为 {}，比当前程序支持的 {} 更新，请升级 RepoUnion",
+            state.version, CONFIG_VERSION
+        ));
+    }
+    // 旧版本缺少的字段已由 serde 默认值补齐，这里只需更新版本号，下次保存即完成迁移。
+    state.version = CONFIG_VERSION;
+    Ok(state)
 }
 
 pub fn save_state(path: &Path, state: &AppState) -> Result<(), String> {
+    let json =
+        serde_json::to_string_pretty(state).map_err(|err| format!("无法序列化配置：{err}"))?;
+    write_text_atomic(path, &json)
+}
+
+/// 原子地写入文本文件：先完整落盘到临时文件，再改名覆盖。配置和快照都用它。
+pub(crate) fn write_text_atomic(path: &Path, json: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|err| format!("无法创建配置目录：{err}"))?;
     }
-    let json =
-        serde_json::to_string_pretty(state).map_err(|err| format!("无法序列化配置：{err}"))?;
     let tmp = path.with_extension("json.tmp");
     {
         use std::io::Write;
@@ -51,6 +69,7 @@ pub fn create_workspace(state: &mut AppState, name: &str) -> Result<Workspace, S
         name,
         sources: Vec::new(),
         standalone_repos: Vec::new(),
+        protected_branches: default_protected_branches(),
     };
     state.active_workspace_id = Some(workspace.id.clone());
     state.workspaces.push(workspace.clone());
@@ -296,6 +315,27 @@ fn in_other_source(workspace: &Workspace, source_index: usize, path: &str) -> bo
     })
 }
 
+/// 设置保护分支规则：去掉首尾空白、空项和重复项，保持用户给出的顺序。允许清空。
+pub fn set_protected_branches(
+    workspace: &mut Workspace,
+    patterns: &[String],
+) -> Result<(), String> {
+    let mut cleaned: Vec<String> = Vec::new();
+    for pattern in patterns {
+        let pattern = pattern.trim();
+        if pattern.is_empty() || cleaned.iter().any(|item| item == pattern) {
+            continue;
+        }
+        // 分支名不能含空白；含空白的规则永远匹配不到，直接拒绝以免用户误以为生效。
+        if pattern.chars().any(char::is_whitespace) {
+            return Err(format!("保护分支规则「{pattern}」不能包含空格"));
+        }
+        cleaned.push(pattern.to_string());
+    }
+    workspace.protected_branches = cleaned;
+    Ok(())
+}
+
 fn all_keys(workspace: &Workspace) -> HashSet<String> {
     workspace
         .repo_paths()
@@ -314,7 +354,52 @@ mod tests {
             name: "测试".into(),
             sources: Vec::new(),
             standalone_repos: Vec::new(),
+            protected_branches: default_protected_branches(),
         }
+    }
+
+    #[test]
+    fn migrates_v1_config_with_default_protected_branches() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(
+            &path,
+            r#"{"version":1,"activeWorkspaceId":"ws","workspaces":[{"id":"ws","name":"旧","sources":[],"standaloneRepos":[]}]}"#,
+        )
+        .unwrap();
+        let state = load_state(&path).unwrap();
+        assert_eq!(state.version, CONFIG_VERSION);
+        assert_eq!(
+            state.workspaces[0].protected_branches,
+            default_protected_branches()
+        );
+
+        save_state(&path, &state).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"version\": 2"), "{text}");
+        assert!(text.contains("protectedBranches"), "{text}");
+    }
+
+    #[test]
+    fn refuses_config_from_newer_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.json");
+        std::fs::write(&path, r#"{"version":99,"workspaces":[]}"#).unwrap();
+        assert!(load_state(&path).unwrap_err().contains("升级"));
+    }
+
+    #[test]
+    fn cleans_protected_branch_patterns() {
+        let mut ws = workspace();
+        let input: Vec<String> = [" main ", "", "main", "release/*"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        set_protected_branches(&mut ws, &input).unwrap();
+        assert_eq!(ws.protected_branches, vec!["main", "release/*"]);
+        assert!(set_protected_branches(&mut ws, &["my branch".to_string()]).is_err());
+        set_protected_branches(&mut ws, &[]).unwrap();
+        assert!(ws.protected_branches.is_empty(), "允许清空");
     }
 
     #[test]
