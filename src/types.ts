@@ -65,6 +65,10 @@ export interface RepoStatus {
   workspaceLabel: string;
   remoteLabel: string;
   tone: Tone;
+  /** 已跟踪改动按类型拆分（均已包含在 changedFiles 里），重命名计入修改。 */
+  modifiedFiles: number;
+  addedFiles: number;
+  deletedFiles: number;
   /** 未跟踪条目数（已包含在 changedFiles 里）。 */
   untrackedFiles: number;
   stashCount: number;
@@ -136,7 +140,8 @@ export interface RescanResult {
   added: number;
 }
 
-export type FilterId = "all" | "changed" | "wrapUp" | "dirty" | "unsynced" | "conflict" | "noUpstream";
+/** 筛选芯片（交互细则 1.2.2），互斥单选，与搜索取交集。 */
+export type FilterId = "all" | "changed" | "dirty" | "unsynced" | "conflict" | "noUpstream";
 
 export type CompareMode = "worktreeHead" | "worktreeIndex" | "indexHead" | "localUpstream";
 
@@ -186,51 +191,27 @@ export interface FileDiff {
   hunks: HunkSpan[];
 }
 
-export function repoName(path: string): string {
-  const trimmed = path.replace(/[\\/]+$/, "");
-  const parts = trimmed.split(/[\\/]/);
-  return parts[parts.length - 1] || path;
+/* ==========================================================================
+   状态判定（与设计规范《交互细则》1.2 的定义一一对应）
+   ========================================================================== */
+
+/** 有改动：已修改、未跟踪或冲突任一大于 0。 */
+export function isDirty(item: RepoStatus): boolean {
+  return item.ok && (item.changedFiles > 0 || item.conflictFiles > 0);
 }
 
-/** 「收工检查」里的一条待办。一个仓库可能有多条，粒度到分支。 */
-export interface WrapUpItem {
-  kind: "uncommitted" | "unpushed" | "stash" | "protected" | "worktree";
-  /** 涉及的分支或 worktree 路径；仓库级的条目为 null。 */
-  target: string | null;
-  text: string;
+export function isDiverged(item: RepoStatus): boolean {
+  return item.ok && item.diverged;
 }
 
-/**
- * 列出一个仓库还没收尾的事项。规则与产品目标的痛点 a / c 对应：
- * 未提交改动、任何本地分支上的未推送提交、stash、保护分支风险、有改动的其他 worktree。
- */
-export function wrapUpItems(item: RepoStatus): WrapUpItem[] {
-  if (!item.ok) {
-    return [];
-  }
-  const items: WrapUpItem[] = [];
-  if (item.protectedRisk) {
-    items.push({ kind: "protected", target: item.branch, text: `在保护分支 ${item.branch} 上有改动或未推送提交` });
-  }
-  if (item.changedFiles > 0 || item.conflictFiles > 0) {
-    const untracked = item.untrackedFiles > 0 ? `（其中未跟踪 ${item.untrackedFiles}）` : "";
-    items.push({ kind: "uncommitted", target: item.branch, text: `${item.changedFiles + item.conflictFiles} 个文件未提交${untracked}` });
-  }
-  for (const branch of item.branches) {
-    if ((branch.unpushed ?? 0) > 0) {
-      const how = branch.upstream && !branch.upstreamGone ? `超前 ${branch.upstream}` : "从未推送到任何远端";
-      items.push({ kind: "unpushed", target: branch.name, text: `${branch.unpushed} 个提交未推送（${how}）` });
-    }
-  }
-  if (item.stashCount > 0) {
-    items.push({ kind: "stash", target: null, text: `${item.stashCount} 个 stash` });
-  }
-  for (const tree of item.worktrees) {
-    if ((tree.changedFiles ?? 0) > 0) {
-      items.push({ kind: "worktree", target: tree.path, text: `worktree ${tree.branch ?? "游离"} 有 ${tree.changedFiles} 个文件未提交` });
-    }
-  }
-  return items;
+/** 未同步：当前分支超前或落后，或其他分支有未推送提交。 */
+export function isUnsynced(item: RepoStatus): boolean {
+  return item.ok && (item.ahead > 0 || item.behind > 0 || item.otherUnpushedBranches > 0);
+}
+
+/** 已跟踪改动数（修改 + 新增 + 删除），即列表里的「n 改」。 */
+export function trackedChanges(item: RepoStatus): number {
+  return item.modifiedFiles + item.addedFiles + item.deletedFiles;
 }
 
 export function matchesFilter(item: RepoStatus, filter: FilterId): boolean {
@@ -239,58 +220,191 @@ export function matchesFilter(item: RepoStatus, filter: FilterId): boolean {
       return true;
     case "changed":
       return item.changedSinceAck;
-    case "wrapUp":
-      return wrapUpItems(item).length > 0;
     case "dirty":
-      return item.tone === "dirty";
+      return isDirty(item);
     case "unsynced":
-      return item.tone === "unsynced";
+      return isUnsynced(item);
     case "conflict":
-      return item.tone === "conflict";
+      return item.ok && (item.conflictFiles > 0 || item.diverged);
     case "noUpstream":
-      return item.ok && !item.hasUpstream;
+      // 游离 HEAD 不算「无上游」，它在分支列单独标出。
+      return item.ok && !item.detached && !item.hasUpstream;
   }
 }
 
-export interface Summary {
-  total: number;
-  dirty: number;
-  unsynced: number;
-  conflict: number;
-  clean: number;
-  noUpstream: number;
+/**
+ * 组内默认排序的紧急度（交互细则 1.2.1），数值越小越靠前：
+ * 1 有新变化 · 2 冲突/分叉 · 3 保护分支风险 · 4 有改动 · 5 读取失败/超时 · 6 未推送 · 7 落后 · 8 干净。
+ * `treatAsNew` 用于「反跳动」：刚标记已查看的仓库在下次刷新前仍按第 1 级排序。
+ */
+export function priorityTier(item: RepoStatus | undefined, treatAsNew = false, fetchFailed = false): number {
+  if (!item) {
+    return 9;
+  }
+  if (item.changedSinceAck || treatAsNew) {
+    return 1;
+  }
+  if (item.ok && (item.conflictFiles > 0 || item.diverged)) {
+    return 2;
+  }
+  if (item.protectedRisk) {
+    return 3;
+  }
+  if (isDirty(item)) {
+    return 4;
+  }
+  if (!item.ok || fetchFailed) {
+    return 5;
+  }
+  if (item.ahead > 0 || item.otherUnpushedBranches > 0) {
+    return 6;
+  }
+  if (item.behind > 0) {
+    return 7;
+  }
+  return 8;
 }
 
-/** 四项汇总互斥，优先级与色条一致。无上游是可以重叠的筛选。 */
-export function summarize(total: number, items: RepoStatus[]): Summary {
-  const summary: Summary = {
-    total,
-    dirty: 0,
-    unsynced: 0,
-    conflict: 0,
-    clean: 0,
-    noUpstream: 0,
-  };
-  for (const item of items) {
-    if (item.ok && !item.hasUpstream) {
-      summary.noUpstream += 1;
+/** 左侧 3px 色条的语义（视觉规范 2.2）。返回 CSS 变量名与是否虚线。 */
+export function barOf(item: RepoStatus | undefined, fetchFailed = false): { color: string; dashed: boolean } {
+  if (!item) {
+    return { color: "var(--status-neutral-bar)", dashed: false };
+  }
+  if (!item.ok || fetchFailed) {
+    return { color: "var(--status-danger-bar)", dashed: true };
+  }
+  if (item.changedSinceAck) {
+    return { color: "var(--status-new-bar)", dashed: false };
+  }
+  if (item.conflictFiles > 0 || item.diverged || item.protectedRisk) {
+    return { color: "var(--status-danger-bar)", dashed: false };
+  }
+  if (isDirty(item)) {
+    return { color: "var(--status-dirty-bar)", dashed: false };
+  }
+  if (isUnsynced(item)) {
+    return { color: "var(--status-sync-bar)", dashed: false };
+  }
+  if (!item.hasUpstream || item.detached) {
+    return { color: "var(--status-neutral-bar)", dashed: false };
+  }
+  return { color: "var(--status-clean-bar)", dashed: false };
+}
+
+/* ==========================================================================
+   收工检查（布局规范 3），粒度到分支
+   ========================================================================== */
+
+export type WrapUpCategory = "protected" | "dirty" | "unpushed" | "worktree" | "stash";
+
+export interface WrapUpItem {
+  key: string;
+  category: WrapUpCategory;
+  repo: RepoStatus;
+  /** 分支名、worktree 路径；stash 为 null。 */
+  target: string | null;
+  detail: string;
+  /** 非当前分支。 */
+  otherBranch?: boolean;
+  /** 未推送条目的超前数与上游。 */
+  ahead?: number;
+  upstream?: string | null;
+}
+
+function changeSummary(item: RepoStatus): string {
+  const parts: string[] = [];
+  const tracked = trackedChanges(item);
+  if (tracked > 0) {
+    parts.push(`${tracked} 改`);
+  }
+  if (item.untrackedFiles > 0) {
+    parts.push(`${item.untrackedFiles} 未跟踪`);
+  }
+  if (item.conflictFiles > 0) {
+    parts.push(`${item.conflictFiles} 冲突`);
+  }
+  return parts.join(" · ");
+}
+
+export function wrapUpItems(item: RepoStatus): WrapUpItem[] {
+  if (!item.ok) {
+    return [];
+  }
+  const items: WrapUpItem[] = [];
+  const current = item.branches.find((branch) => branch.isCurrent);
+  if (item.protectedRisk) {
+    const ahead = current?.unpushed ?? item.ahead;
+    const detail = [changeSummary(item), ahead > 0 ? `超前 ${ahead}` : ""].filter(Boolean).join(" · ");
+    items.push({ key: `protected:${item.path}`, category: "protected", repo: item, target: item.branch, detail });
+  } else if (isDirty(item)) {
+    items.push({ key: `dirty:${item.path}`, category: "dirty", repo: item, target: item.branch, detail: changeSummary(item) });
+  }
+  for (const branch of item.branches) {
+    const unpushed = branch.unpushed ?? 0;
+    // 当前分支已作为保护分支风险列出时不重复。
+    if (unpushed <= 0 || (branch.isCurrent && item.protectedRisk)) {
+      continue;
     }
-    switch (item.tone) {
-      case "conflict":
-        summary.conflict += 1;
-        break;
-      case "dirty":
-        summary.dirty += 1;
-        break;
-      case "unsynced":
-        summary.unsynced += 1;
-        break;
-      case "clean":
-        summary.clean += 1;
-        break;
-      default:
-        break;
+    items.push({
+      key: `unpushed:${item.path}:${branch.name}`,
+      category: "unpushed",
+      repo: item,
+      target: branch.name,
+      detail: branch.upstream && !branch.upstreamGone ? branch.upstream : "从未推送到任何远端",
+      otherBranch: !branch.isCurrent,
+      ahead: unpushed,
+      upstream: branch.upstreamGone ? null : branch.upstream,
+    });
+  }
+  for (const tree of item.worktrees) {
+    if ((tree.changedFiles ?? 0) > 0) {
+      items.push({
+        key: `worktree:${item.path}:${tree.path}`,
+        category: "worktree",
+        repo: item,
+        target: tree.branch ?? "游离 HEAD",
+        detail: `${tree.changedFiles} 个文件未提交 · ${tree.path}`,
+      });
     }
   }
-  return summary;
+  if (item.stashCount > 0) {
+    items.push({
+      key: `stash:${item.path}`,
+      category: "stash",
+      repo: item,
+      target: null,
+      detail: `${item.stashCount} 个 stash 未清理`,
+    });
+  }
+  return items;
+}
+
+/** Unix 秒转成「3 分钟前」「2 天前」这样的相对时间。 */
+export function relativeTime(seconds: number | null): string {
+  if (!seconds) {
+    return "—";
+  }
+  const minutes = Math.max(0, Math.floor((Date.now() / 1000 - seconds) / 60));
+  if (minutes < 2) {
+    return "刚刚";
+  }
+  if (minutes < 60) {
+    return `${minutes} 分钟前`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} 小时前`;
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 30) {
+    return `${days} 天前`;
+  }
+  const months = Math.floor(days / 30);
+  return months < 12 ? `${months} 个月前` : `${Math.floor(months / 12)} 年前`;
+}
+
+export function repoName(path: string): string {
+  const trimmed = path.replace(/[\\/]+$/, "");
+  const parts = trimmed.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
 }

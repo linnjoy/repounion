@@ -1,65 +1,59 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { Plus, Settings } from "lucide-vue-next";
 import { selectWorkspace, ui } from "../state";
-import type { Workspace } from "../types";
+import { setTheme, theme, type ThemePref } from "../theme";
+import { isDirty, type Workspace } from "../types";
+import AppIcon from "./AppIcon.vue";
 
 function countOf(workspace: Workspace): number {
   return workspace.sources.reduce((sum, source) => sum + source.repos.length, 0) + workspace.standaloneRepos.length;
 }
 
-const menuWorkspace = computed(() => ui.workspaces.find((item) => item.id === ui.wsMenuId) ?? null);
-
-function dotClass(workspace: Workspace): string {
+/**
+ * 工作区圆点：有新变化为紫、有改动为橙、否则为绿。
+ * 只有当前工作区有实时状态；其他工作区没有读取过，显示中性灰。
+ */
+function dotColor(workspace: Workspace): string {
   if (workspace.id !== ui.activeWorkspaceId || ui.statuses.length === 0) {
-    return "idle";
+    return "var(--status-neutral-bar)";
   }
-  if (ui.statuses.some((item) => item.tone === "conflict")) {
-    return "conflict";
+  if (ui.statuses.some((item) => item.changedSinceAck)) {
+    return "var(--status-new-bar)";
   }
-  if (ui.statuses.some((item) => item.tone === "dirty")) {
-    return "alert";
+  if (ui.statuses.some(isDirty)) {
+    return "var(--status-dirty-bar)";
   }
-  if (ui.statuses.every((item) => item.tone === "clean")) {
-    return "ok";
-  }
-  return "idle";
+  return "var(--status-clean-bar)";
 }
 
-function toggleMenu(event: MouseEvent, workspace: Workspace) {
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  if (ui.wsMenuId === workspace.id) {
-    ui.wsMenuId = null;
-    ui.menu = null;
-    return;
-  }
-  ui.menu = null;
-  ui.wsMenuId = workspace.id;
-  ui.menu = { path: `ws:${workspace.id}`, x: rect.left, y: rect.bottom + 4 };
-}
+const themes: { id: ThemePref; label: string }[] = [
+  { id: "system", label: "跟随" },
+  { id: "light", label: "浅色" },
+  { id: "dark", label: "深色" },
+];
 
-function rename(workspace: Workspace) {
-  ui.wsMenuId = null;
-  ui.menu = null;
-  ui.nameDialog = { mode: "rename", id: workspace.id, name: workspace.name };
-}
-
-function editProtected(id: string) {
-  ui.wsMenuId = null;
-  ui.menu = null;
-  ui.protectedDialogId = id;
-}
-
-function askDelete(id: string) {
-  ui.wsMenuId = null;
-  ui.menu = null;
-  ui.confirmDeleteId = id;
+function createWorkspace() {
+  ui.nameDialog = { mode: "create", id: "", name: "" };
 }
 </script>
 
 <template>
   <aside class="sidebar">
-    <div class="side-head">工作区</div>
-    <div class="ws-list">
+    <div class="sidebar-brand">
+      <div class="brand-left">
+        <AppIcon :size="20" />
+        <span>RepoUnion</span>
+      </div>
+      <button type="button" class="btn btn-ghost btn-icon" title="新建工作区" @click="createWorkspace">
+        <Plus :size="16" :stroke-width="1.75" />
+      </button>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-heading">
+        <span>工作区</span>
+        <span class="mono">{{ ui.workspaces.length }}</span>
+      </div>
       <div
         v-for="workspace in ui.workspaces"
         :key="workspace.id"
@@ -70,26 +64,39 @@ function askDelete(id: string) {
         @click="selectWorkspace(workspace.id)"
         @keydown.enter.prevent="selectWorkspace(workspace.id)"
       >
-        <span class="dot" :class="dotClass(workspace)" />
-        <span class="name" :title="workspace.name" @dblclick.stop="rename(workspace)">{{ workspace.name }}</span>
-        <span class="count">{{ countOf(workspace) }}</span>
-        <button type="button" class="ws-more" title="工作区操作" @click.stop="toggleMenu($event, workspace)">⋯</button>
+        <div class="ws-item-left">
+          <span class="ws-dot" :style="{ background: dotColor(workspace) }" />
+          <span class="ws-name" :title="workspace.name">{{ workspace.name }}</span>
+        </div>
+        <div class="ws-right">
+          <span class="ws-count mono">{{ countOf(workspace) }}</span>
+          <button
+            type="button"
+            class="btn btn-ghost btn-icon btn-sm ws-gear"
+            title="工作区设置"
+            @click.stop="ui.settingsId = workspace.id"
+          >
+            <Settings :size="14" :stroke-width="1.75" />
+          </button>
+        </div>
       </div>
-      <p v-if="ui.workspaces.length === 0 && !ui.booting" class="loading-line">还没有工作区</p>
+      <div v-if="ui.workspaces.length === 0 && !ui.booting" class="sidebar-empty">暂无工作区</div>
     </div>
-    <div class="side-foot">
-      <button type="button" class="ghost-btn" @click="ui.nameDialog = { mode: 'create', id: '', name: '' }">
-        + 新建工作区
-      </button>
-    </div>
-    <div
-      v-if="ui.wsMenuId && ui.menu"
-      class="menu"
-      :style="{ left: `${ui.menu.x}px`, top: `${ui.menu.y}px` }"
-    >
-      <button v-if="menuWorkspace" type="button" @click="rename(menuWorkspace)">重命名</button>
-      <button v-if="menuWorkspace" type="button" @click="editProtected(menuWorkspace.id)">保护分支…</button>
-      <button v-if="menuWorkspace" type="button" class="danger" @click="askDelete(menuWorkspace.id)">删除工作区</button>
+
+    <div class="sidebar-footer">
+      <div class="theme-seg" role="radiogroup" aria-label="界面主题">
+        <button
+          v-for="item in themes"
+          :key="item.id"
+          type="button"
+          role="radio"
+          :aria-checked="theme.pref === item.id"
+          :class="{ active: theme.pref === item.id }"
+          @click="setTheme(item.id)"
+        >
+          {{ item.label }}
+        </button>
+      </div>
     </div>
   </aside>
 </template>
