@@ -4,14 +4,22 @@ mod commands;
 mod open_external;
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
-use repounion_core::CancelToken;
+use repounion_core::{CancelToken, SnapshotStore};
 use tauri::Manager;
 
 pub struct ConfigLock {
     pub path: PathBuf,
     pub lock: Mutex<()>,
+}
+
+/// 「有新变化」快照。启动时读入内存，修改后写回 `snapshots.json`。
+/// 放在内存里统一加锁，避免刷新和「标记已查看」同时读写文件互相覆盖。
+#[derive(Clone)]
+pub struct SnapshotState {
+    pub path: PathBuf,
+    pub store: Arc<Mutex<SnapshotStore>>,
 }
 
 /// 记录当前这一批 Fetch 的取消标志。同一时间只允许一批 Fetch。
@@ -64,6 +72,12 @@ pub fn run() {
                 lock: Mutex::new(()),
             });
             app.manage(FetchControl::default());
+            let snapshot_path =
+                repounion_core::default_snapshot_path().map_err(std::io::Error::other)?;
+            app.manage(SnapshotState {
+                store: Arc::new(Mutex::new(repounion_core::load_snapshots(&snapshot_path))),
+                path: snapshot_path,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -81,6 +95,8 @@ pub fn run() {
             commands::refresh_status,
             commands::fetch_all,
             commands::cancel_fetch,
+            commands::ack_repos,
+            commands::set_protected_branches,
             commands::list_repo_changes,
             commands::load_file_diff,
             commands::open_in_folder,

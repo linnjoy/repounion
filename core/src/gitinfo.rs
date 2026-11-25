@@ -13,6 +13,10 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
+use crate::insight::{
+    file_stamp, is_protected, porcelain_path, read_branches, read_worktrees, BranchInfo,
+    Fingerprint, WorktreeInfo,
+};
 use crate::parallel::map_parallel;
 use crate::paths::repo_name;
 
@@ -89,6 +93,12 @@ pub struct ParsedStatus {
     pub behind: u32,
     pub changed_files: u32,
     pub conflict_files: u32,
+    /// 未跟踪的条目数（已包含在 changed_files 里）。默认模式下整个未跟踪目录算一项。
+    pub untracked_files: u32,
+    /// `--show-stash` 输出的 stash 数量。
+    pub stash_count: u32,
+    /// 改动条目的原始行（1/2/u/?），用于计算改动指纹。
+    pub entries: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -110,6 +120,30 @@ pub struct RepoStatus {
     pub workspace_label: String,
     pub remote_label: String,
     pub tone: Tone,
+    /// 未跟踪的条目数（已包含在 changed_files 里）。
+    pub untracked_files: u32,
+    pub stash_count: u32,
+    /// 所有本地分支（含当前分支）的推送情况。
+    pub branches: Vec<BranchInfo>,
+    /// 除当前分支外，还有未推送提交的分支数量。
+    pub other_unpushed_branches: u32,
+    /// 是否存在任何远端引用。没有远端时不统计「未推送」。
+    pub has_remote: bool,
+    /// 当前仓库之外的其他工作区（linked worktree，或当前是 worktree 时的主工作区）。
+    pub worktrees: Vec<WorktreeInfo>,
+    pub head_oid: String,
+    pub last_commit_at: Option<i64>,
+    /// 当前分支命中工作区的保护分支规则。
+    pub on_protected_branch: bool,
+    /// 在保护分支上有未提交改动或未推送提交，需要警告。
+    pub protected_risk: bool,
+    /// 本地状态指纹：HEAD、本地分支、stash、改动文件及其修改时间、其他工作区的改动。
+    /// 不含远端引用，所以 Fetch 不会改变它。
+    pub fingerprint: String,
+    /// 指纹与上次「标记已查看」时不同。由调用方根据快照填写。
+    pub changed_since_ack: bool,
+    /// 附加信息读取失败的说明。主状态仍然有效。
+    pub notes: Vec<String>,
 }
 
 impl RepoStatus {
@@ -181,6 +215,19 @@ impl RepoStatus {
             workspace_label,
             remote_label,
             tone,
+            untracked_files: parsed.untracked_files,
+            stash_count: parsed.stash_count,
+            branches: Vec::new(),
+            other_unpushed_branches: 0,
+            has_remote: false,
+            worktrees: Vec::new(),
+            head_oid: parsed.oid,
+            last_commit_at: None,
+            on_protected_branch: false,
+            protected_risk: false,
+            fingerprint: String::new(),
+            changed_since_ack: false,
+            notes: Vec::new(),
         }
     }
 
@@ -202,7 +249,94 @@ impl RepoStatus {
             workspace_label: "无法读取".to_string(),
             remote_label: "—".to_string(),
             tone: Tone::Error,
+            untracked_files: 0,
+            stash_count: 0,
+            branches: Vec::new(),
+            other_unpushed_branches: 0,
+            has_remote: false,
+            worktrees: Vec::new(),
+            head_oid: String::new(),
+            last_commit_at: None,
+            on_protected_branch: false,
+            protected_risk: false,
+            fingerprint: String::new(),
+            changed_since_ack: false,
+            notes: Vec::new(),
         }
+    }
+
+    /// 补充分支、worktree、保护分支和指纹。任何一项失败只记入 notes，不影响主状态。
+    fn enrich(&mut self, repo: &Path, branch_name: &str, entries: &[String], protected: &[String]) {
+        match read_branches(repo) {
+            Ok((branches, has_remote)) => {
+                self.has_remote = has_remote;
+                self.other_unpushed_branches = branches
+                    .iter()
+                    .filter(|branch| !branch.is_current && branch.unpushed.unwrap_or(0) > 0)
+                    .count() as u32;
+                self.last_commit_at = branches
+                    .iter()
+                    .find(|branch| branch.is_current)
+                    .and_then(|branch| branch.last_commit_at);
+                self.branches = branches;
+            }
+            Err(message) => self.notes.push(format!("读取分支失败：{message}")),
+        }
+
+        let mut worktree_lines = Vec::new();
+        match read_worktrees(repo) {
+            Ok((worktrees, lines)) => {
+                self.worktrees = worktrees;
+                worktree_lines = lines;
+            }
+            Err(message) => self.notes.push(format!("读取 worktree 失败：{message}")),
+        }
+
+        // 游离 HEAD 不属于任何分支，不做保护分支判断。
+        if !self.detached && !branch_name.is_empty() {
+            self.on_protected_branch = is_protected(protected, branch_name);
+        }
+        let current_unpushed = self
+            .branches
+            .iter()
+            .find(|branch| branch.is_current)
+            .and_then(|branch| branch.unpushed)
+            .unwrap_or(0);
+        self.protected_risk = self.on_protected_branch
+            && (self.changed_files > 0 || self.conflict_files > 0 || current_unpushed > 0);
+
+        self.fingerprint = self.compute_fingerprint(repo, entries, &worktree_lines);
+    }
+
+    fn compute_fingerprint(
+        &self,
+        repo: &Path,
+        entries: &[String],
+        worktree_lines: &[String],
+    ) -> String {
+        let mut hash = Fingerprint::new();
+        hash.field(self.head_oid.as_bytes());
+        hash.field(self.branch.as_bytes());
+        hash.field(self.stash_count.to_string().as_bytes());
+        // 本地分支取名称和提交号：任何分支有新提交、被重置或新建删除都会变化。
+        // 远端引用不参与，Fetch 不会让仓库变成「有新变化」。
+        for branch in &self.branches {
+            hash.field(branch.name.as_bytes());
+            hash.field(branch.oid.as_bytes());
+        }
+        let mut sorted: Vec<&String> = entries.iter().collect();
+        sorted.sort();
+        for line in sorted {
+            hash.field(line.as_bytes());
+            // 状态行不会因「已修改的文件再次被修改」而变化，补上文件大小和修改时间。
+            if let Some(rel) = porcelain_path(line) {
+                hash.field(file_stamp(repo, &rel).as_bytes());
+            }
+        }
+        for lines in worktree_lines {
+            hash.field(lines.as_bytes());
+        }
+        hash.finish()
     }
 }
 
@@ -241,14 +375,16 @@ pub struct FetchProgress {
 }
 
 pub fn query_statuses(paths: &[String]) -> StatusReport {
-    query_statuses_with(paths, |_| {})
+    query_statuses_with(paths, &[], |_| {})
 }
 
 /// 读取本地状态。每完成一个仓库调用一次 `on_item`，调用顺序不保证与 `paths` 一致；
 /// 返回值中的 `items` 保持与 `paths` 相同的顺序。
-pub fn query_statuses_with<F>(paths: &[String], on_item: F) -> StatusReport
+/// `on_item` 可以修改结果（例如填写「有新变化」），修改会保留在返回值里。
+/// `protected` 是工作区的保护分支规则。
+pub fn query_statuses_with<F>(paths: &[String], protected: &[String], on_item: F) -> StatusReport
 where
-    F: Fn(&RepoStatus) + Sync,
+    F: Fn(&mut RepoStatus) + Sync,
 {
     if paths.is_empty() {
         return StatusReport {
@@ -263,8 +399,8 @@ where
         };
     }
     let items = map_parallel(paths.to_vec(), GIT_CONCURRENCY, |path| {
-        let status = status_of(&path);
-        on_item(&status);
+        let mut status = status_of(&path, protected);
+        on_item(&mut status);
         status
     });
     StatusReport {
@@ -274,14 +410,19 @@ where
 }
 
 pub fn fetch_all(paths: &[String]) -> FetchReport {
-    fetch_all_with(paths, &CancelToken::new(), |_| {})
+    fetch_all_with(paths, &[], &CancelToken::new(), |_| {})
 }
 
 /// 对每个仓库 fetch 后重新读取本地状态。
 /// 某个仓库失败、超时或被取消不会影响其他仓库；取消后尚未开始的仓库跳过 fetch，只读本地状态。
-pub fn fetch_all_with<F>(paths: &[String], cancel: &CancelToken, on_item: F) -> FetchReport
+pub fn fetch_all_with<F>(
+    paths: &[String],
+    protected: &[String],
+    cancel: &CancelToken,
+    on_item: F,
+) -> FetchReport
 where
-    F: Fn(&FetchProgress) + Sync,
+    F: Fn(&mut FetchProgress) + Sync,
 {
     if paths.is_empty() {
         return FetchReport {
@@ -301,12 +442,12 @@ where
     }
     let rows = map_parallel(paths.to_vec(), GIT_CONCURRENCY, |path| {
         let fetch_error = run_fetch(Path::new(&path), cancel).err();
-        let status = status_of(&path);
-        let progress = FetchProgress {
+        let status = status_of(&path, protected);
+        let mut progress = FetchProgress {
             item: status,
             fetch_error,
         };
-        on_item(&progress);
+        on_item(&mut progress);
         (path, progress.fetch_error, progress.item)
     });
     let mut failures = Vec::new();
@@ -336,9 +477,17 @@ fn missing_git_items(paths: &[String]) -> Vec<RepoStatus> {
         .collect()
 }
 
-pub fn status_of(path: &str) -> RepoStatus {
-    match run_status(Path::new(path)) {
-        Ok(parsed) => RepoStatus::from_parsed(path, parsed),
+/// 读取一个仓库的完整本地状态。`protected` 为工作区的保护分支规则。
+pub fn status_of(path: &str, protected: &[String]) -> RepoStatus {
+    let repo = Path::new(path);
+    match run_status(repo) {
+        Ok(parsed) => {
+            let branch_name = parsed.branch.clone();
+            let entries = parsed.entries.clone();
+            let mut status = RepoStatus::from_parsed(path, parsed);
+            status.enrich(repo, &branch_name, &entries, protected);
+            status
+        }
         Err(message) => RepoStatus::failed(path, message),
     }
 }
@@ -518,7 +667,8 @@ fn run_status(path: &Path) -> Result<ParsedStatus, String> {
             .arg("--no-optional-locks")
             .arg("-C")
             .arg(path)
-            .args(["status", "--porcelain=v2", "--branch"]),
+            // --show-stash 在头部输出 `# stash N`（Git 2.35+），省掉一次单独的 stash 查询。
+            .args(["status", "--porcelain=v2", "--branch", "--show-stash"]),
     )?;
     if !output.status.success() {
         return Err(stderr_brief(&output));
@@ -605,6 +755,9 @@ pub fn parse_porcelain_v2(text: &str) -> Result<ParsedStatus, String> {
     let mut behind = 0;
     let mut changed_files = 0;
     let mut conflict_files = 0;
+    let mut untracked_files = 0;
+    let mut stash_count = 0;
+    let mut entries = Vec::new();
 
     for raw in text.split('\n') {
         let line = raw.trim_end_matches('\r');
@@ -630,10 +783,17 @@ pub fn parse_porcelain_v2(text: &str) -> Result<ParsedStatus, String> {
             if rest != "(initial)" {
                 oid = rest.to_string();
             }
+        } else if let Some(rest) = line.strip_prefix("# stash ") {
+            stash_count = rest.trim().parse().unwrap_or(0);
         } else if line.starts_with("1 ") || line.starts_with("2 ") || line.starts_with("? ") {
             changed_files += 1;
+            if line.starts_with("? ") {
+                untracked_files += 1;
+            }
+            entries.push(line.to_string());
         } else if line.starts_with("u ") {
             conflict_files += 1;
+            entries.push(line.to_string());
         }
     }
 
@@ -646,6 +806,9 @@ pub fn parse_porcelain_v2(text: &str) -> Result<ParsedStatus, String> {
         behind,
         changed_files,
         conflict_files,
+        untracked_files,
+        stash_count,
+        entries,
     })
 }
 
@@ -761,33 +924,88 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         assert_eq!(status.tone, Tone::NoUpstream);
     }
 
-    fn git_ok() -> bool {
-        let mut command = Command::new("git");
-        hide_console_window(&mut command);
-        command
-            .arg("--version")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .map(|status| status.success())
-            .unwrap_or(false)
+    use super::tests_support::{git, git_ok};
+
+    #[test]
+    fn parses_stash_and_untracked_counts() {
+        let text = "\
+# branch.oid abc
+# branch.head main
+# stash 3
+1 .M N... 100644 100644 100644 a b a.txt
+? new.txt
+? build/
+";
+        let parsed = parse_porcelain_v2(text).unwrap();
+        assert_eq!(parsed.stash_count, 3);
+        assert_eq!(parsed.untracked_files, 2);
+        assert_eq!(parsed.changed_files, 3, "未跟踪项仍计入改动总数");
+        assert_eq!(parsed.entries.len(), 3);
     }
 
-    pub(crate) fn git(dir: &Path, args: &[&str]) {
-        let mut command = Command::new("git");
-        hide_console_window(&mut command);
-        let status = command
-            .current_dir(dir)
-            .args(args)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GCM_INTERACTIVE", "Never")
-            .env_remove("GIT_DIR")
-            .env_remove("GIT_WORK_TREE")
-            .env_remove("GIT_IMPLICIT_WORK_TREE")
-            .status()
+    #[test]
+    fn live_status_reports_branches_stash_worktree_and_protection() {
+        if !git_ok() {
+            return;
+        }
+        let root = tempfile::tempdir().unwrap();
+        let origin = root.path().join("origin");
+        fs::create_dir(&origin).unwrap();
+        git(&origin, &["init", "-b", "main"]);
+        git(&origin, &["config", "user.email", "t@example.com"]);
+        git(&origin, &["config", "user.name", "tester"]);
+        fs::write(origin.join("a.txt"), "v1\n").unwrap();
+        git(&origin, &["add", "a.txt"]);
+        git(&origin, &["commit", "-m", "init"]);
+
+        git(root.path(), &["clone", "origin", "local"]);
+        let local = root.path().join("local");
+        git(&local, &["config", "user.email", "t@example.com"]);
+        git(&local, &["config", "user.name", "tester"]);
+        // 另一个从未推送过的本地分支上有 1 个提交。
+        git(&local, &["switch", "-c", "feature/x"]);
+        fs::write(local.join("b.txt"), "b\n").unwrap();
+        git(&local, &["add", "b.txt"]);
+        git(&local, &["commit", "-m", "feature"]);
+        git(&local, &["switch", "main"]);
+        // main 上一份 stash，以及一处未提交改动。
+        fs::write(local.join("a.txt"), "stashed\n").unwrap();
+        git(&local, &["stash"]);
+        fs::write(local.join("a.txt"), "dirty\n").unwrap();
+        // agent 常用的 linked worktree，里面有一个未跟踪文件。
+        let tree = root.path().join("local-agent");
+        git(
+            &local,
+            &[
+                "worktree",
+                "add",
+                "-b",
+                "agent/task",
+                &tree.to_string_lossy(),
+            ],
+        );
+        fs::write(tree.join("agent.txt"), "x\n").unwrap();
+
+        let protected = vec!["main".to_string()];
+        let status = status_of(&local.to_string_lossy(), &protected);
+        assert!(status.ok, "{:?}", status.error);
+        assert!(status.notes.is_empty(), "{:?}", status.notes);
+        assert!(status.has_remote);
+        assert_eq!(status.stash_count, 1);
+        let feature = status
+            .branches
+            .iter()
+            .find(|b| b.name == "feature/x")
             .unwrap();
-        assert!(status.success(), "git {args:?} 失败");
+        assert_eq!(feature.unpushed, Some(1));
+        assert!(status.other_unpushed_branches >= 1);
+        assert_eq!(status.worktrees.len(), 1);
+        assert_eq!(status.worktrees[0].branch.as_deref(), Some("agent/task"));
+        assert_eq!(status.worktrees[0].changed_files, Some(1));
+        assert!(status.on_protected_branch);
+        assert!(status.protected_risk, "保护分支上有未提交改动应警告");
+        assert!(!status.fingerprint.is_empty());
+        assert!(status.last_commit_at.is_some());
     }
 
     #[test]
@@ -803,7 +1021,7 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         git(dir.path(), &["add", "a.txt"]);
         git(dir.path(), &["commit", "-m", "init"]);
 
-        let clean = status_of(&dir.path().to_string_lossy());
+        let clean = status_of(&dir.path().to_string_lossy(), &[]);
         assert!(clean.ok, "{:?}", clean.error);
         assert_eq!(clean.workspace_label, "工作区干净");
         assert_eq!(clean.remote_label, "没有上游分支");
@@ -811,7 +1029,7 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
 
         fs::write(dir.path().join("a.txt"), "v2\n").unwrap();
         fs::write(dir.path().join("new.txt"), "x\n").unwrap();
-        let dirty = status_of(&dir.path().to_string_lossy());
+        let dirty = status_of(&dir.path().to_string_lossy(), &[]);
         assert_eq!(dirty.changed_files, 2);
         assert_eq!(dirty.workspace_label, "2 个文件已修改");
         assert_eq!(dirty.tone, Tone::Dirty);
@@ -880,7 +1098,7 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         cancel.cancel();
         let seen = Mutex::new(Vec::new());
         let path = dir.path().to_string_lossy().into_owned();
-        let report = fetch_all_with(std::slice::from_ref(&path), &cancel, |progress| {
+        let report = fetch_all_with(std::slice::from_ref(&path), &[], &cancel, |progress| {
             seen.lock().unwrap().push(progress.clone());
         });
         assert!(report.cancelled);
@@ -907,7 +1125,7 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
             second.path().to_string_lossy().into_owned(),
         ];
         let seen = Mutex::new(Vec::new());
-        let report = query_statuses_with(&paths, |item| {
+        let report = query_statuses_with(&paths, &[], |item| {
             seen.lock().unwrap().push(item.path.clone());
         });
         let mut seen = seen.into_inner().unwrap();
@@ -949,7 +1167,7 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         git(&origin, &["add", "a.txt"]);
         git(&origin, &["commit", "-m", "v2"]);
 
-        let before = status_of(&local.to_string_lossy());
+        let before = status_of(&local.to_string_lossy(), &[]);
         assert_eq!(before.behind, 0, "刷新状态不应自己去访问远端");
         assert_eq!(before.tone, Tone::Clean);
 
@@ -960,5 +1178,44 @@ u UU N... 100644 100644 100644 100644 a b c d src/conflict.rs
         assert_eq!(report.items[0].tone, Tone::Unsynced);
         let after = fs::read_to_string(local.join("a.txt")).unwrap();
         assert_eq!(after, local_file, "Fetch 不应改写工作区文件");
+    }
+}
+
+/// 测试共用的 Git 辅助函数。
+#[cfg(test)]
+pub(crate) mod tests_support {
+    use super::hide_console_window;
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+
+    pub fn git_ok() -> bool {
+        let mut command = Command::new("git");
+        hide_console_window(&mut command);
+        command
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    pub fn git(dir: &Path, args: &[&str]) {
+        let mut command = Command::new("git");
+        hide_console_window(&mut command);
+        let status = command
+            .current_dir(dir)
+            .args(args)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "Never")
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
+            .env_remove("GIT_IMPLICIT_WORK_TREE")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .unwrap();
+        assert!(status.success(), "git {args:?} 失败");
     }
 }

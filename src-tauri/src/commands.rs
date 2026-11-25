@@ -1,6 +1,7 @@
 //! 前端可调用的命令。配置写入用户目录，不放进任何一个 Git 仓库。
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -10,13 +11,15 @@ use repounion_core::{
     absorb_discovered, add_standalone, commit_folder, create_workspace as create_ws,
     delete_workspace as delete_ws, fetch_all_with as fetch_repos, list_changes,
     load_file_diff as read_file_diff, load_state, normalize_dir, normalize_repo,
-    query_statuses_with, remove_repo as remove_from_ws, rename_workspace as rename_ws, save_state,
-    scan_folder, scan_git_repos, set_active, set_auto_scan, workspace_mut, AppState, ChangeList,
-    FetchProgress, FetchReport, FileDiff, RepoStatus, ScanReport, StatusReport, Workspace,
+    query_statuses_with, remove_repo as remove_from_ws, rename_workspace as rename_ws,
+    save_snapshots, save_state, scan_folder, scan_git_repos, set_active, set_auto_scan,
+    set_protected_branches as set_protected, unix_now, workspace_mut, AckRequest, AppState,
+    ChangeList, FetchProgress, FetchReport, FileDiff, RepoStatus, ScanReport, StatusReport,
+    Workspace,
 };
 
 use crate::open_external::{open_folder, open_terminal, open_vscode};
-use crate::{ConfigLock, FetchControl};
+use crate::{ConfigLock, FetchControl, SnapshotState};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +62,40 @@ fn paths_of(config: &ConfigLock, workspace_id: &str) -> Result<Vec<String>, Stri
         .find(|workspace| workspace.id == workspace_id)
         .ok_or("工作区不存在")?;
     Ok(workspace.repo_paths())
+}
+
+/// 刷新和 Fetch 需要的仓库路径与保护分支规则。
+fn targets_of(
+    config: &ConfigLock,
+    workspace_id: &str,
+) -> Result<(Vec<String>, Vec<String>), String> {
+    let _guard = lock_config(config)?;
+    let state = load_state(&config.path)?;
+    let workspace = state
+        .workspaces
+        .iter()
+        .find(|workspace| workspace.id == workspace_id)
+        .ok_or("工作区不存在")?;
+    Ok((workspace.repo_paths(), workspace.protected_branches.clone()))
+}
+
+/// 用快照填写「有新变化」。首次见到的仓库会建立基线，并通过 `dirty` 记下需要保存。
+fn observe(snapshots: &SnapshotState, status: &mut RepoStatus, dirty: &AtomicBool) {
+    if let Ok(mut store) = snapshots.store.lock() {
+        if store.observe(status, unix_now()) {
+            dirty.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+/// 有新基线时保存快照。保存失败不影响本次刷新结果，下次刷新会再尝试。
+fn persist_if_dirty(snapshots: &SnapshotState, dirty: &AtomicBool) {
+    if !dirty.load(Ordering::SeqCst) {
+        return;
+    }
+    if let Ok(store) = snapshots.store.lock() {
+        let _ = save_snapshots(&snapshots.path, &store);
+    }
 }
 
 #[tauri::command]
@@ -268,15 +305,21 @@ pub fn remove_repo(
 #[tauri::command]
 pub async fn refresh_status(
     config: State<'_, ConfigLock>,
+    snapshots: State<'_, SnapshotState>,
     workspace_id: String,
     on_item: Channel<RepoStatus>,
 ) -> Result<StatusReport, String> {
-    let paths = paths_of(&config, &workspace_id)?;
+    let (paths, protected) = targets_of(&config, &workspace_id)?;
+    let snapshots = snapshots.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        query_statuses_with(&paths, |item| {
+        let dirty = AtomicBool::new(false);
+        let report = query_statuses_with(&paths, &protected, |item| {
+            observe(&snapshots, item, &dirty);
             // 前端窗口已关闭时发送会失败，忽略即可，最终结果仍会返回。
             let _ = on_item.send(item.clone());
-        })
+        });
+        persist_if_dirty(&snapshots, &dirty);
+        report
     })
     .await
     .map_err(|err| format!("状态查询任务失败：{err}"))
@@ -288,16 +331,22 @@ pub async fn refresh_status(
 pub async fn fetch_all(
     config: State<'_, ConfigLock>,
     control: State<'_, FetchControl>,
+    snapshots: State<'_, SnapshotState>,
     workspace_id: String,
     on_item: Channel<FetchProgress>,
 ) -> Result<FetchReport, String> {
-    let paths = paths_of(&config, &workspace_id)?;
+    let (paths, protected) = targets_of(&config, &workspace_id)?;
+    let snapshots = snapshots.inner().clone();
     let cancel = control.begin()?;
     let worker_cancel = cancel.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        fetch_repos(&paths, &worker_cancel, |progress| {
+        let dirty = AtomicBool::new(false);
+        let report = fetch_repos(&paths, &protected, &worker_cancel, |progress| {
+            observe(&snapshots, &mut progress.item, &dirty);
             let _ = on_item.send(progress.clone());
-        })
+        });
+        persist_if_dirty(&snapshots, &dirty);
+        report
     })
     .await
     .map_err(|err| format!("Fetch 任务失败：{err}"));
@@ -309,6 +358,31 @@ pub async fn fetch_all(
 #[tauri::command]
 pub fn cancel_fetch(control: State<FetchControl>) {
     control.cancel();
+}
+
+/// 标记仓库「已查看」：把基线更新为前端当时看到的指纹。
+#[tauri::command]
+pub fn ack_repos(snapshots: State<SnapshotState>, items: Vec<AckRequest>) -> Result<(), String> {
+    let mut store = snapshots
+        .store
+        .lock()
+        .map_err(|_| "内部锁已损坏，请重启应用".to_string())?;
+    store.ack(&items, unix_now());
+    save_snapshots(&snapshots.path, &store)
+}
+
+/// 设置工作区的保护分支规则。
+#[tauri::command]
+pub fn set_protected_branches(
+    config: State<ConfigLock>,
+    workspace_id: String,
+    patterns: Vec<String>,
+) -> Result<Workspace, String> {
+    with_config(&config, |state| {
+        let workspace = workspace_mut(state, &workspace_id)?;
+        set_protected(workspace, &patterns)?;
+        Ok(workspace.clone())
+    })
 }
 
 /// 只读取这一个仓库的改动文件，不预取 diff。

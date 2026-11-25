@@ -787,7 +787,7 @@ fn split_rename_paths(rest: &str) -> Option<(String, String)> {
     Some((unquote_git_path(path.trim()), unquote_git_path(old.trim())))
 }
 
-fn take_fields(line: &str, count: usize) -> Option<(Vec<String>, String)> {
+pub(crate) fn take_fields(line: &str, count: usize) -> Option<(Vec<String>, String)> {
     let mut rest = line.trim_end_matches('\r');
     let mut fields = Vec::with_capacity(count);
     for _ in 0..count {
@@ -803,7 +803,7 @@ fn take_fields(line: &str, count: usize) -> Option<(Vec<String>, String)> {
 }
 
 /// 解开 `core.quotePath` 打开时的 C 风格引号。未加引号的路径原样返回。
-fn unquote_git_path(raw: &str) -> String {
+pub(crate) fn unquote_git_path(raw: &str) -> String {
     let raw = raw.trim();
     if raw.len() < 2 || !raw.starts_with('"') || !raw.ends_with('"') {
         return raw.to_string();
